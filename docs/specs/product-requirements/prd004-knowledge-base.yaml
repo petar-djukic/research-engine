@@ -1,0 +1,94 @@
+id: prd004-knowledge-base
+title: Knowledge Base
+problem: |
+  After extraction, knowledge items exist as YAML files in knowledge/extracted/,
+  one file per paper. A researcher who has processed twenty papers now has twenty
+  separate files containing hundreds of typed items. Finding all claims about a
+  specific topic, retrieving methods related to a technique, or listing results
+  that mention a metric requires reading through every file. There is no unified
+  query capability.
+
+  We need a knowledge base that ingests extracted items, builds a retrieval index,
+  and supports both full-text search and structured queries. The knowledge base
+  must maintain provenance links so every retrieved item traces back to its source
+  paper and section. Storage must remain local, human-readable, and compatible
+  with version control.
+
+goals:
+  - G1: Store all extracted KnowledgeItems in a queryable local knowledge base
+  - G2: Support full-text search across all knowledge items
+  - G3: Support structured queries by item type, tag, paper, or combination thereof
+  - G4: Maintain provenance links from every stored item back to its source paper and section
+  - G5: Update the knowledge base incrementally when new extractions are available
+
+requirements:
+  R1:
+    title: Storage
+    items:
+      - R1.1: Store must ingest KnowledgeItems from YAML files in knowledge/extracted/ and persist them in the knowledge base
+      - R1.2: The knowledge base must use SQLite as the storage backend, with the database file located at knowledge/index/research.db
+      - R1.3: Store must create the SQLite database and schema if they do not exist
+      - R1.4: Each KnowledgeItem must be stored with all its fields (type, content, paper_id, section, page, confidence, tags, citations, item_id)
+      - R1.5: Store must maintain a papers table with Paper metadata so queries can join items to paper-level information
+      - R1.6: Store must write a human-readable export of the knowledge base to knowledge/index/export.yaml whenever the database is updated
+
+  R2:
+    title: Full-Text Search
+    items:
+      - R2.1: Retrieve must support full-text search across the content field of all KnowledgeItems using SQLite FTS5
+      - R2.2: Full-text search must return items ranked by relevance
+      - R2.3: Retrieve must support limiting results to a maximum count (default 20)
+      - R2.4: Each search result must include the KnowledgeItem fields and the Paper metadata for provenance
+
+  R3:
+    title: Structured Queries
+    items:
+      - R3.1: Retrieve must support filtering by item type (claim, method, definition, result)
+      - R3.2: Retrieve must support filtering by one or more tags
+      - R3.3: Retrieve must support filtering by paper_id to retrieve all items from a specific paper
+      - R3.4: Retrieve must support combining filters (e.g. type=method AND tag=transformer)
+      - R3.5: Retrieve must support combining full-text search with structured filters
+      - R3.6: Retrieve must return results sorted by relevance (for full-text queries) or by paper and section order (for structured queries)
+
+  R4:
+    title: Provenance and Source Linking
+    items:
+      - R4.1: Every retrieved KnowledgeItem must include the paper_id, section, and page fields linking to the source
+      - R4.2: Retrieve must support a "trace" operation that returns the full context for an item (the surrounding paragraph in the source Markdown)
+      - R4.3: The trace operation must read from papers/markdown/ using the paper_id and page marker to locate the source passage
+
+  R5:
+    title: Incremental Updates
+    items:
+      - R5.1: Store must detect new or updated extraction files in knowledge/extracted/ by comparing file modification times against the last indexing timestamp
+      - R5.2: When a paper's extraction file has changed, Store must remove the old items for that paper and insert the new ones
+      - R5.3: Store must not re-index papers whose extraction files have not changed
+      - R5.4: Store must print status (indexing, skipped, updated, failed) for each paper to stdout
+      - R5.5: Store must return a summary at the end (count of indexed, skipped, updated, and failed papers)
+
+  R6:
+    title: Export
+    items:
+      - R6.1: Export must dump the full knowledge base to a YAML file at knowledge/index/export.yaml
+      - R6.2: Export must dump the full knowledge base to a JSON file at knowledge/index/export.json
+      - R6.3: Exported files must include all KnowledgeItem fields and Paper metadata
+      - R6.4: Export must support filtering by the same criteria as Retrieve (type, tag, paper_id, full-text query) so partial exports are possible
+
+non_goals:
+  - We do not provide distributed or networked storage; the knowledge base is a local SQLite file
+  - We do not provide real-time sync or live updates; the researcher runs the index command to update
+  - We do not host a web UI for browsing the knowledge base; queries go through the CLI
+  - We do not implement semantic or vector-based search in this phase; full-text search with FTS5 is sufficient
+  - We do not deduplicate knowledge items across papers that state the same fact
+
+acceptance_criteria:
+  - Store ingests extraction YAML files and creates the SQLite database with correct schema
+  - Full-text search returns relevant KnowledgeItems ranked by relevance
+  - Structured query by type returns only items of the specified type
+  - Structured query by tag returns items tagged with the specified tag
+  - Combined query (type + tag + full-text) returns correctly filtered results
+  - Trace operation returns the surrounding context from the source Markdown
+  - Incremental update indexes new papers without re-processing unchanged ones
+  - Incremental update replaces items for a paper whose extraction has changed
+  - Export produces valid YAML and JSON files containing all stored items
+  - Store creates directories and database file when they do not exist

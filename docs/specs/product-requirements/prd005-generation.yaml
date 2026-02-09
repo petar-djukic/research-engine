@@ -1,0 +1,94 @@
+id: prd005-generation
+title: Paper Generation
+problem: |
+  A researcher has built a knowledge base from dozens of papers. The knowledge
+  base contains hundreds of typed items: claims, methods, definitions, and
+  results, each traceable to a specific source. When the researcher sits down
+  to write a literature review, survey, or original paper drawing on this
+  knowledge, they face a manual synthesis task. They must formulate queries,
+  read retrieved items, organize them into an argument, draft prose, and insert
+  citations. This process is slow and error-prone because the researcher must
+  hold the mapping between claims and sources in their head.
+
+  We need a generation stage that takes a query or outline, retrieves relevant
+  knowledge items, and produces draft text with inline citations. Every factual
+  claim in the generated output must link to the source KnowledgeItem and its
+  originating paper. The researcher edits and refines the draft; the system
+  provides the grounded first pass.
+
+goals:
+  - G1: Generate draft document sections from knowledge base content with inline citations
+  - G2: Support brainstorming queries that explore connections, gaps, and related concepts in the knowledge base
+  - G3: Support outline-driven generation where the researcher specifies section structure before content
+  - G4: Ensure every factual claim in generated text traces to a specific source item and paper
+
+requirements:
+  R1:
+    title: Brainstorming
+    items:
+      - R1.1: Brainstorm must accept a free-text query describing a topic or question (e.g. "What methods exist for transformer efficiency?")
+      - R1.2: Brainstorm must retrieve relevant KnowledgeItems from the knowledge base and present them grouped by paper and type
+      - R1.3: Brainstorm must identify connections between items across papers (e.g. two papers that propose similar methods)
+      - R1.4: Brainstorm must identify gaps (e.g. a method that no paper has evaluated on a specific benchmark)
+      - R1.5: Brainstorm must output a structured summary to stdout or to a file in output/notes/ as Markdown
+
+  R2:
+    title: Outline Support
+    items:
+      - R2.1: Generate must accept an outline as input, either as a YAML file or as Markdown with section headings and optional one-line descriptions
+      - R2.2: The outline must specify section titles and optionally a brief description of what each section should cover
+      - R2.3: Generate must process the outline section by section, retrieving relevant items for each section's topic
+      - R2.4: Generate must produce output that follows the outline structure, with each section heading and its generated content
+
+  R3:
+    title: Draft Generation
+    items:
+      - R3.1: Generate must call a Generative AI API (Claude or compatible) to compose prose from retrieved KnowledgeItems
+      - R3.2: Generated text must include inline citations in a consistent format (e.g. "[Author, Year]" or "[paper_id]") for every factual claim
+      - R3.3: Each inline citation must map to a specific KnowledgeItem and its source paper; the mapping must be included in the output metadata
+      - R3.4: Generate must include a references section at the end of the output listing all cited papers with their metadata
+      - R3.5: Generate must write output to output/drafts/ as a Markdown file with a descriptive filename (e.g. "transformer-efficiency-survey.md")
+      - R3.6: Generate must create the output/drafts/ directory if it does not exist
+
+  R4:
+    title: Citation Tracking
+    items:
+      - R4.1: Every factual claim in generated text must have an inline citation linking to a source
+      - R4.2: Generate must write a citation map file alongside the draft (e.g. "transformer-efficiency-survey-citations.yaml") listing each citation key, the KnowledgeItem ID, paper_id, section, and page
+      - R4.3: The citation map must enable the researcher to verify any claim by following the link back through the KnowledgeItem to the source passage in papers/markdown/
+      - R4.4: Generate must warn when it produces a claim that does not have a supporting KnowledgeItem (unsupported claim)
+
+  R5:
+    title: Iterative Refinement
+    items:
+      - R5.1: Generate must accept an existing draft as input and regenerate specified sections while preserving others
+      - R5.2: When regenerating a section, Generate must use the same outline entry and re-query the knowledge base, potentially incorporating items added since the first generation
+      - R5.3: Generate must support adding researcher-provided notes or constraints for a section (e.g. "focus on results from 2023 onwards")
+      - R5.4: Generate must preserve manual edits in sections that are not being regenerated
+
+  R6:
+    title: Output Formats
+    items:
+      - R6.1: Generate must produce Markdown as the default output format
+      - R6.2: Generate must support a LaTeX-ready output option that uses \cite{} for citations and includes a BibTeX file for the references
+      - R6.3: The LaTeX output must be written to output/drafts/ with a .tex extension alongside a .bib file
+      - R6.4: Both output formats must include the same citation map YAML file for traceability
+
+non_goals:
+  - We do not produce publication-ready papers; the output is a first draft that requires researcher editing
+  - We do not format for specific journal or conference templates; the researcher applies formatting after editing
+  - We do not perform autonomous multi-round revision; the researcher drives each refinement cycle
+  - We do not generate figures, tables, or diagrams; the draft is text with citations
+  - We do not evaluate the quality or correctness of generated claims beyond checking citation support
+
+acceptance_criteria:
+  - Brainstorm retrieves relevant items and presents them grouped with identified connections and gaps
+  - Generate accepts an outline and produces a multi-section draft
+  - Every factual claim in the generated draft has an inline citation
+  - The citation map YAML file maps each citation to a KnowledgeItem, paper, section, and page
+  - The references section lists all cited papers with metadata
+  - Generate warns when a claim lacks a supporting KnowledgeItem
+  - Iterative refinement regenerates specified sections while preserving others
+  - LaTeX output includes \cite{} references and a companion BibTeX file
+  - Output files are written to output/drafts/ with correct naming
+  - Brainstorm output is written to output/notes/ as Markdown

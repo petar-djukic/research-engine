@@ -1,0 +1,85 @@
+id: prd001-acquisition
+title: Paper Acquisition
+problem: |
+  Researchers discover papers across multiple sources: arXiv preprint pages,
+  DOI-identified journal articles, and direct PDF links shared in blogs or
+  social media. Each source uses a different URL scheme and may require
+  different resolution steps to reach the actual PDF file. Without a unified
+  acquisition layer, a researcher must manually navigate each source, download
+  PDFs by hand, rename them, and track where each paper came from. This
+  manual process loses provenance (which URL yielded which file) and produces
+  inconsistent file naming that makes downstream processing fragile.
+
+  We need a single operation that accepts any supported identifier, resolves
+  it to a PDF, downloads the file, extracts metadata, and records the
+  provenance so every subsequent pipeline stage can trace data back to its
+  origin.
+
+goals:
+  - G1: Accept arXiv IDs, DOIs, and direct PDF URLs as input and resolve each to a downloadable PDF
+  - G2: Download PDFs to a consistent local directory with predictable file naming
+  - G3: Extract and store metadata (title, authors, date, abstract, source URL) alongside each PDF
+  - G4: Skip downloads when the paper already exists on disk (idempotent operation)
+  - G5: Report progress and errors so the researcher knows what succeeded and what failed
+
+requirements:
+  R1:
+    title: Source Resolution
+    items:
+      - R1.1: Acquire must accept an arXiv identifier (e.g. "2301.07041" or "arXiv:2301.07041") and resolve it to the PDF download URL at arxiv.org
+      - R1.2: Acquire must accept a DOI (e.g. "10.1145/1234567.1234568") and resolve it to a PDF download URL via content negotiation or publisher redirect
+      - R1.3: Acquire must accept a direct PDF URL (any URL ending in .pdf or returning Content-Type application/pdf) and use it as-is
+      - R1.4: Acquire must return a descriptive error when the identifier format is unrecognized
+      - R1.5: Acquire must return a descriptive error when resolution fails (network error, 404, no PDF found)
+
+  R2:
+    title: Download and Storage
+    items:
+      - R2.1: Acquire must download the PDF to the project's papers/raw/ directory
+      - R2.2: The downloaded file must be named using a slug derived from the paper identifier (e.g. "2301.07041.pdf" for arXiv, DOI-derived slug for DOIs)
+      - R2.3: Acquire must create the papers/raw/ directory if it does not exist
+      - R2.4: If a PDF with the same filename already exists on disk, Acquire must skip the download and return the existing Paper record
+      - R2.5: Acquire must use a temporary file during download and rename it to the final path only after the download completes, preventing partial files
+      - R2.6: Acquire must respect a configurable timeout for HTTP requests (default 60 seconds)
+
+  R3:
+    title: Metadata Extraction
+    items:
+      - R3.1: Acquire must create a Paper metadata record for each successfully downloaded paper
+      - R3.2: The Paper record must include the fields defined in pkg/types (at minimum source URL, local PDF path, title, authors, date, and abstract)
+      - R3.3: For arXiv papers, Acquire must retrieve metadata from the arXiv API (title, authors, published date, abstract)
+      - R3.4: For DOI-identified papers, Acquire must attempt metadata retrieval from CrossRef or the DOI resolver response
+      - R3.5: For direct URL papers, Acquire must populate the source URL field and leave other metadata fields empty (to be filled during conversion or manually)
+      - R3.6: Acquire must write the Paper metadata record to papers/metadata/ as a YAML file named to match the PDF filename (e.g. "2301.07041.yaml")
+
+  R4:
+    title: Progress and Error Reporting
+    items:
+      - R4.1: Acquire must print the paper identifier and status (downloading, skipped, failed) to stdout for each paper processed
+      - R4.2: When processing multiple papers in a batch, Acquire must continue processing remaining papers after a single failure
+      - R4.3: Acquire must return a summary at the end of a batch (count of downloaded, skipped, and failed papers)
+      - R4.4: Acquire must return a non-zero exit code if any paper in the batch failed
+
+  R5:
+    title: Rate Limiting and Access
+    items:
+      - R5.1: Acquire must include a configurable delay between consecutive downloads (default 1 second) to respect source rate limits
+      - R5.2: Acquire must set a User-Agent header identifying the tool (e.g. "research-engine/0.1") on all HTTP requests
+      - R5.3: Acquire must follow HTTP redirects (up to 10 hops) when resolving download URLs
+
+non_goals:
+  - We do not build a paper search or discovery feature; the researcher provides specific identifiers
+  - We do not parse or validate PDF content during acquisition; that is the Conversion stage
+  - We do not manage authentication for paywalled sources; the researcher must supply accessible URLs
+  - We do not deduplicate papers that have both an arXiv ID and a DOI pointing to the same content
+  - We do not cache or proxy papers for other users; this is a single-researcher local tool
+
+acceptance_criteria:
+  - Acquire downloads an arXiv paper given its ID and creates the Paper record
+  - Acquire downloads a paper given a DOI and creates the Paper record
+  - Acquire downloads a paper given a direct PDF URL and creates the Paper record
+  - Acquire skips download when the PDF already exists on disk
+  - Acquire fails with a descriptive error for an unrecognized identifier
+  - Acquire fails with a descriptive error when the network request fails
+  - Metadata YAML file is written alongside the PDF for each successful acquisition
+  - Batch acquisition continues after individual failures and reports a summary

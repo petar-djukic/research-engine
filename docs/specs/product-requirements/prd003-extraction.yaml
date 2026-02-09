@@ -1,0 +1,94 @@
+id: prd003-extraction
+title: Knowledge Extraction
+problem: |
+  After conversion, each paper exists as structured Markdown with section
+  headings, paragraphs, and reference lists. This structured text is more
+  accessible than a PDF, but the knowledge within it remains buried in prose.
+  A researcher who wants to compare methods across papers, find all claims
+  about a specific metric, or trace a definition to its source must read
+  every paragraph manually.
+
+  We need an extraction stage that reads structured Markdown and produces
+  typed knowledge items: claims, methods, definitions, and results. Each
+  item must carry provenance (which paper, which section, which page) so the
+  researcher can verify any extracted item against its source. Extraction
+  uses Generative AI to handle the variety of academic writing styles while
+  enforcing a consistent output schema.
+
+goals:
+  - G1: Extract typed knowledge items (claims, methods, definitions, results) from structured Markdown
+  - G2: Attach provenance to every extracted item (paper ID, section heading, page number)
+  - G3: Produce a consistent output schema regardless of the source paper's writing style
+  - G4: Process only new or changed papers incrementally, avoiding re-extraction of unchanged content
+
+requirements:
+  R1:
+    title: Knowledge Item Types
+    items:
+      - R1.1: Extract must identify and categorize items as one of four types, claim (a factual assertion or finding), method (a technique, algorithm, or procedure), definition (a term or concept being defined), or result (a quantitative outcome, metric, or comparison)
+      - R1.2: Each KnowledgeItem must include the fields defined in pkg/types (at minimum type, content, paper_id, section, page, and confidence)
+      - R1.3: The content field must preserve the original language from the source paper, not paraphrase it, so the researcher can verify against the source
+      - R1.4: The confidence field must be a float between 0.0 and 1.0 indicating how certain the extraction is about the item type and boundaries
+
+  R2:
+    title: Provenance Tracking
+    items:
+      - R2.1: Every KnowledgeItem must include the paper_id matching the Paper record from acquisition
+      - R2.2: Every KnowledgeItem must include the section heading under which the item was found
+      - R2.3: Every KnowledgeItem must include the page number derived from page marker comments in the Markdown
+      - R2.4: When an item spans multiple pages, the page field must contain the page number where the item begins
+      - R2.5: Extract must generate a stable item ID for each KnowledgeItem so items can be referenced and deduplicated across re-extractions
+
+  R3:
+    title: Citation Graph Construction
+    items:
+      - R3.1: Extract must identify references cited within the text (e.g. "[1]", "[Smith et al., 2020]") and record which KnowledgeItems cite which references
+      - R3.2: Extract must parse the bibliography section and produce a list of cited works with available metadata (authors, title, year, venue)
+      - R3.3: Extract must link inline citations to bibliography entries when the reference format allows matching (e.g. numeric citations to numbered bibliography entries)
+      - R3.4: Citation data must be stored alongside KnowledgeItems in the output file
+
+  R4:
+    title: Automatic Tagging
+    items:
+      - R4.1: Extract must assign one or more topic tags to each KnowledgeItem (e.g. "transformer", "attention mechanism", "benchmark")
+      - R4.2: Tags must be lowercase, hyphenated, and drawn from the vocabulary of the paper rather than a fixed taxonomy
+      - R4.3: Extract must assign paper-level tags summarizing the overall topics of the paper
+      - R4.4: Tags must be stored in a tags field on the KnowledgeItem
+
+  R5:
+    title: Extraction Process
+    items:
+      - R5.1: Extract must read the structured Markdown from papers/markdown/ for each paper
+      - R5.2: Extract must call a Generative AI API (Claude or compatible) to perform the classification and extraction
+      - R5.3: Extract must send the Markdown in section-sized chunks to avoid exceeding API context limits
+      - R5.4: Extract must validate the API response against the KnowledgeItem schema and reject malformed responses
+      - R5.5: Extract must retry failed API calls up to 3 times with exponential backoff before marking a paper as failed
+      - R5.6: Extract must write the extracted KnowledgeItems to knowledge/extracted/ as a YAML file named by paper ID (e.g. "2301.07041-items.yaml")
+
+  R6:
+    title: Incremental Processing
+    items:
+      - R6.1: Extract must skip papers whose Markdown file has not changed since the last extraction (based on file modification time)
+      - R6.2: When a paper's Markdown has changed, Extract must re-extract all items for that paper and replace the previous output
+      - R6.3: Extract must print status (extracting, skipped, failed) for each paper to stdout
+      - R6.4: Extract must return a summary at the end of a batch (count of extracted, skipped, and failed papers)
+      - R6.5: Extract must return a non-zero exit code if any paper in the batch failed
+
+non_goals:
+  - We do not perform semantic understanding or reasoning about paper content; we classify and extract surface-level items
+  - We do not summarize papers; extracted items preserve original language
+  - We do not resolve references to external papers (fetching cited works is out of scope for extraction)
+  - We do not build the retrieval index; that is the Knowledge Base stage
+  - We do not handle non-English papers in this phase
+
+acceptance_criteria:
+  - Extract produces KnowledgeItems from a converted paper with correct types (claim, method, definition, result)
+  - Every KnowledgeItem includes paper_id, section, and page provenance fields
+  - Extract generates stable item IDs that remain consistent across re-extractions of unchanged content
+  - Extract identifies inline citations and links them to bibliography entries
+  - Extract assigns topic tags to each KnowledgeItem
+  - Extract skips papers whose Markdown has not changed
+  - Extract re-extracts items when the Markdown has changed
+  - Extract validates API responses and rejects malformed output
+  - Extract retries failed API calls before marking a paper as failed
+  - Output YAML file contains well-formed KnowledgeItems matching the schema
