@@ -1,3 +1,8 @@
+---
+name: do-work-docs
+description: Write documentation (PRDs, use cases, architecture) following format rules
+---
+
 # Command: Do Work (Documentation)
 
 Use this command when the work is **documentation** (markdown in `docs/`): PRDs, use cases, invention disclosures, ARCHITECTURE updates, or other docs. Follow the **crumb-format** rule for output location and format; use the format rule named in the issue (prd-format, use-case-format, patent-disclosure-format, documentation-standards).

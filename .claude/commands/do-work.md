@@ -1,3 +1,8 @@
+---
+name: do-work
+description: Pick and complete an issue from the backlog (routes to docs or code workflow)
+---
+
 # Command: Do Work
 
 Pick **one** of the two workflows below depending on the type of work. Use **do-work-docs** for documentation tasks, **do-work-code** for implementation tasks.

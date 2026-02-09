@@ -1,3 +1,8 @@
+---
+name: bootstrap
+description: Start a new project by asking questions and creating initial epics and issues
+---
+
 # Command: Bootstrap Project
 
 I'm starting a new project and need you to help me create the initial epics and issues to structure the work.
