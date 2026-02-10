@@ -1,3 +1,6 @@
+---
+globs: "docs/specs/product-requirements/**"
+---
 # PRD Format
 
 PRDs are YAML files stored at `/docs/specs/product-requirements/prd[NNN]-[feature-name].yaml`.

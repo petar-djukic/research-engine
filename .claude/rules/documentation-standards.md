@@ -1,3 +1,6 @@
+---
+globs: "docs/**"
+---
 # Documentation Standards
 
 ## Writing Style

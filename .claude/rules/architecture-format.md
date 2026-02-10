@@ -1,3 +1,6 @@
+---
+globs: docs/ARCHITECTURE.md
+---
 # Architecture Document Format
 
 An architecture document describes **how the system is built**: components, interfaces, protocols, data flow, and design decisions. It is the bridge between vision (what and why) and PRDs (numbered requirements). It does not list requirements; it describes structure, contracts, and rationale so implementers and PRD authors stay aligned.

@@ -1,3 +1,6 @@
+---
+globs: "docs/specs/use-cases/**"
+---
 # Use Case Format
 
 Use cases are YAML files stored at `docs/specs/use-cases/rel[NN].[N]-uc[NNN]-[short-name].yaml`.

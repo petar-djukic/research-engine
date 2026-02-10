@@ -1,3 +1,6 @@
+---
+globs: docs/VISION.md
+---
 # Vision Document Format
 
 A vision document states **what the project is**, **why it exists**, **how success is measured**, and **what it is not**. It orients stakeholders, new contributors, and downstream docs (ARCHITECTURE, PRDs). It is not a PRD; it does not list numbered requirements. It sets direction and boundaries.

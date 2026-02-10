@@ -1,3 +1,6 @@
+---
+globs: docs/specs/test-suites/**
+---
 # Test Suite Format
 
 A test suite is a YAML document that groups related test cases under shared preconditions. Each suite contains metadata, setup, and a list of individual test cases with explicit inputs and expected outputs. Test suites trace back to use cases or PRD requirements.

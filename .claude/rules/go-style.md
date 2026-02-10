@@ -1,3 +1,6 @@
+---
+globs: "**/*.go"
+---
 # Go Code Style
 
 Rules for writing maintainable Go code in this project.
