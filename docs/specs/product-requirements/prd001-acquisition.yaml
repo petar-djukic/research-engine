@@ -68,7 +68,7 @@ requirements:
       - R5.3: Acquire must follow HTTP redirects (up to 10 hops) when resolving download URLs
 
 non_goals:
-  - We do not build a paper search or discovery feature; the researcher provides specific identifiers
+  - We do not build a paper search or discovery feature; identifiers typically come from the Search stage (prd006-search) or are provided directly by the researcher
   - We do not parse or validate PDF content during acquisition; that is the Conversion stage
   - We do not manage authentication for paywalled sources; the researcher must supply accessible URLs
   - We do not deduplicate papers that have both an arXiv ID and a DOI pointing to the same content
@@ -83,3 +83,6 @@ acceptance_criteria:
   - Acquire fails with a descriptive error when the network request fails
   - Metadata YAML file is written alongside the PDF for each successful acquisition
   - Batch acquisition continues after individual failures and reports a summary
+
+references:
+  - prd006-search
