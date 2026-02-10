@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-We build a personal research pipeline that takes academic papers from search through knowledge extraction to new paper generation. The system is a Go command-line tool backed by Mage build targets, designed to run locally on a single machine. The pipeline begins with search: the researcher describes a topic or question, and the system finds relevant papers across arXiv, Semantic Scholar, and other sources. Search results feed directly into acquisition, which downloads the PDFs. From there, each stage transforms data into a more useful form: raw PDFs become structured text, structured text becomes extracted knowledge, and extracted knowledge feeds into new writing.
+This is a personal research pipeline that takes academic papers from search through knowledge extraction to new paper generation. The system is a Go command-line tool backed by Mage build targets, designed to run locally on a single machine. The pipeline begins with search: the researcher describes a topic or question, and the system finds relevant papers across arXiv, Semantic Scholar, and other sources. Search results feed directly into acquisition, which downloads the PDFs. From there, each stage transforms data into a more useful form: raw PDFs become structured text, structured text becomes extracted knowledge, and extracted knowledge feeds into new writing.
 
 We are not a citation manager, a paper database, or a hosted service. We are a local, opinionated pipeline that a single researcher operates to turn reading into writing.
 
