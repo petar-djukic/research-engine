@@ -2,7 +2,7 @@
 
 ## System Overview
 
-We build a six-stage pipeline that transforms academic papers into a structured knowledge base and uses that knowledge to generate new documents. The pipeline begins with search: the researcher describes a topic, and the system queries academic APIs to find relevant papers. Search results feed into acquisition, which downloads PDFs. From there, papers flow through conversion, extraction, storage, and generation. Each stage reads from the local filesystem and writes back to it, producing artifacts in human-readable formats. Mage build targets orchestrate the stages so a researcher can run the full pipeline or invoke any stage independently.
+We build a six-stage pipeline that transforms academic papers into a structured knowledge base and uses that knowledge to generate new documents. The pipeline begins with search: the researcher describes a topic, and the system queries academic APIs to find relevant papers. Search results feed into acquisition, which downloads PDFs. From there, papers flow through conversion, extraction, storage, and generation. Each stage reads from the local filesystem and writes back to it, producing artifacts in human-readable formats. The researcher runs any stage independently as a Cobra subcommand or composes multi-stage workflows through prompts or shell scripts.
 
 The core insight is that research writing depends on structured knowledge, not raw text. By converting unstructured PDFs into typed knowledge items (claims, methods, definitions) with provenance links back to source passages, we make the gap between reading and writing a pipeline problem rather than a manual effort.
 
@@ -86,7 +86,7 @@ Table 2 Pipeline Operations
 | Knowledge Base | Retrieve | Query string | Ranked KnowledgeItems | Returns items relevant to the query |
 | Generation | Generate | Query + retrieved items | Draft Markdown with citations | Produces a document section grounded in specific items |
 
-Each operation is a Mage target. PRDs define the full signatures, preconditions, postconditions, and error handling for each operation.
+Each operation is a Cobra subcommand under `research-engine`. PRDs define the full signatures, preconditions, postconditions, and error handling for each operation.
 
 ## System Components
 
@@ -134,11 +134,11 @@ We pass data between pipeline stages through files on disk rather than in-memory
 
 Benefits: transparency, reproducibility, ability to re-run individual stages, compatibility with version control. The tradeoff is that file I/O adds latency, but for a personal tool processing tens of papers, throughput is not the bottleneck.
 
-### Decision 2 Mage as Pipeline Orchestrator
+### Decision 2 Cobra CLI with Prompt-Based Composition
 
-We use Mage (a Go-native build tool) instead of Make, shell scripts, or a workflow engine. Mage targets are Go functions, which means the orchestration layer and the pipeline implementation share the same language and toolchain. Mage handles dependency resolution between targets (e.g., conversion depends on acquisition) and provides a familiar CLI interface.
+We expose each pipeline stage as a Cobra subcommand (`research-engine search`, `research-engine acquire`, `research-engine convert`, etc.) rather than using Mage targets for pipeline orchestration. The researcher composes multi-stage workflows through natural-language prompts or shell scripts rather than programmatic target chaining. Each subcommand is a self-contained operation that reads from disk and writes back to disk, so the researcher can invoke stages individually or string them together in any order.
 
-Benefits: single language, Go-native dependency management, no shell portability issues. The alternative of Make was rejected because Makefiles become hard to maintain with complex Go build logic. Shell scripts were rejected for portability reasons.
+Benefits: the CLI is the primary interface for both humans and agents, composition happens at the shell or prompt level where it is visible and editable, and each subcommand can evolve independently. Mage remains in the project for build automation, testing, and developer tooling, but it does not orchestrate pipeline stages. The alternative of Mage-based orchestration was rejected because it couples pipeline composition to build-tool conventions and hides the workflow from the researcher.
 
 ### Decision 3 Go Over Python
 
@@ -165,7 +165,7 @@ Table 3 Technology Choices
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
 | Implementation language | Go | Pipeline implementation, CLI, type safety |
-| Build and orchestration | Mage | Pipeline target orchestration, dependency resolution |
+| Build automation | Mage | Build automation, testing, developer tooling |
 | Academic search | arXiv API, Semantic Scholar API | Query academic sources for candidate papers |
 | PDF conversion | GROBID or pdftotext (external) | Transform PDF to structured text |
 | Knowledge storage | JSON/YAML files | Human-readable, version-controllable item storage |
@@ -182,8 +182,14 @@ PRDs for each stage will specify the exact tool versions and configuration.
 ```
 research-engine/
   cmd/
-    research-engine/       # CLI entry point
+    research-engine/       # CLI entry point and subcommands
       main.go
+      search.go            # research-engine search subcommand
+      acquire.go           # research-engine acquire subcommand
+      convert.go           # research-engine convert subcommand
+      extract.go           # research-engine extract subcommand
+      knowledge.go         # research-engine knowledge subcommand
+      generate.go          # research-engine generate subcommand
   internal/
     search/                # Search stage implementation
     acquire/               # Acquisition stage implementation
@@ -195,13 +201,7 @@ research-engine/
   pkg/
     types/                 # Shared types: Paper, KnowledgeItem, Draft
   magefiles/
-    search.go              # Mage targets for search
-    acquire.go             # Mage targets for acquisition
-    convert.go             # Mage targets for conversion
-    extract.go             # Mage targets for extraction
-    knowledge.go           # Mage targets for knowledge base
-    generate.go            # Mage targets for generation
-    pipeline.go            # Mage targets for full pipeline runs
+    magefile.go            # Build automation, testing, developer tooling
   tests/
     integration/           # End-to-end pipeline tests
   docs/
@@ -220,7 +220,7 @@ Table 4 Package Roles
 
 | Directory | Role |
 |-----------|------|
-| cmd/research-engine/ | CLI entry point. Parses flags, wires dependencies, starts pipeline. |
+| cmd/research-engine/ | CLI entry point and Cobra subcommands. Each pipeline stage is a subcommand. |
 | internal/search/ | Queries academic APIs, deduplicates and ranks candidate papers. |
 | internal/acquire/ | Downloads papers, resolves identifiers, creates Paper records. |
 | internal/convert/ | Invokes PDF conversion tools, produces structured Markdown. |
@@ -229,18 +229,18 @@ Table 4 Package Roles
 | internal/generate/ | Retrieves items, calls Generative AI, produces cited drafts. |
 | internal/pipeline/ | Sequences stages, manages per-paper state progression. |
 | pkg/types/ | Shared data structures: SearchResult, Paper, KnowledgeItem, Draft, Config. |
-| magefiles/ | Mage build targets. One file per pipeline stage plus orchestration. |
+| magefiles/ | Build and developer tooling (build, test, lint, stats). No pipeline stage logic. |
 | tests/integration/ | Tests that run multiple stages end-to-end. |
 
 ## Implementation Status
 
-We are completing the Foundation phase. VISION.md is complete, ARCHITECTURE.md is updated for the six-stage pipeline, and PRDs exist for all six stages. Mage scaffolding is in place. No stage implementation code has been written yet.
+We are completing the Foundation phase. VISION.md is complete, ARCHITECTURE.md is updated for the six-stage pipeline, and PRDs exist for all six stages. Cobra CLI scaffolding is in place. No stage implementation code has been written yet.
 
 Table 5 Implementation Phases
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| Foundation | Nearing completion | VISION complete; ARCHITECTURE updated; PRDs for all six stages complete; Mage scaffolding in place |
+| Foundation | Nearing completion | VISION complete; ARCHITECTURE updated; PRDs for all six stages complete; Cobra CLI scaffolding in place |
 | Core Pipeline | Not started | Search, Acquisition, and Conversion stages |
 | Knowledge | Not started | Extraction and Knowledge Base |
 | Generation | Not started | Draft generation with citations |
