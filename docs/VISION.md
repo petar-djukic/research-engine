@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-We build a personal research pipeline that takes academic papers from acquisition through knowledge extraction to new paper generation. The system is a Go command-line tool backed by Mage build targets, designed to run locally on a single machine. Each stage of the pipeline transforms data into a more useful form: raw PDFs become structured text, structured text becomes extracted knowledge, and extracted knowledge feeds into new writing.
+We build a personal research pipeline that takes academic papers from search through knowledge extraction to new paper generation. The system is a Go command-line tool backed by Mage build targets, designed to run locally on a single machine. The pipeline begins with search: the researcher describes a topic or question, and the system finds relevant papers across arXiv, Semantic Scholar, and other sources. Search results feed directly into acquisition, which downloads the PDFs. From there, each stage transforms data into a more useful form: raw PDFs become structured text, structured text becomes extracted knowledge, and extracted knowledge feeds into new writing.
 
 We are not a citation manager, a paper database, or a hosted service. We are a local, opinionated pipeline that a single researcher operates to turn reading into writing.
 
@@ -10,7 +10,7 @@ We are not a citation manager, a paper database, or a hosted service. We are a l
 
 ### Research Context
 
-Researchers read papers to build understanding and produce new work. The path from finding a paper to using its ideas in new writing involves several distinct activities: locating and downloading papers, converting PDFs into machine-readable text, extracting claims and methods from that text, organizing extracted knowledge, and composing new documents that draw on that knowledge. Each activity has its own tools, formats, and friction points.
+Researchers read papers to build understanding and produce new work. The path from a research question to new writing involves several distinct activities: searching for relevant papers, downloading them, converting PDFs into machine-readable text, extracting claims and methods from that text, organizing extracted knowledge, and composing new documents that draw on that knowledge. Each activity has its own tools, formats, and friction points.
 
 ### The Problem
 
@@ -20,7 +20,7 @@ Existing tools optimize for one stage. Zotero manages references. Semantic Schol
 
 ### What We Do
 
-We define a pipeline with five stages: acquire, convert, extract, store, and generate. A Go CLI orchestrates these stages through Mage build targets. Papers enter as URLs or identifiers and move through each stage, accumulating structured metadata and extracted knowledge along the way. The pipeline stores everything locally in a well-defined directory structure. When the researcher is ready to write, the generation stage draws on the accumulated knowledge base to produce drafts that cite their sources.
+We define a pipeline with six stages: search, acquire, convert, extract, store, and generate. A Go CLI orchestrates these stages through Mage build targets. The researcher starts with a topic or question; search finds relevant papers across academic sources and feeds their identifiers into acquisition. From there, papers move through each stage, accumulating structured metadata and extracted knowledge along the way. The pipeline stores everything locally in a well-defined directory structure. When the researcher is ready to write, the generation stage draws on the accumulated knowledge base to produce drafts that cite their sources.
 
 The pipeline treats each stage as an independent, composable step. A researcher can run the full pipeline or invoke individual stages. All intermediate artifacts persist on disk in human-readable formats.
 
@@ -28,14 +28,14 @@ The pipeline treats each stage as an independent, composable step. A researcher 
 
 A personal research pipeline fits a specific need that commercial tools do not address well. Commercial reference managers focus on bibliography and annotation, not on transforming paper content into reusable knowledge. Generative AI writing tools operate on prompts, not on structured knowledge bases built from specific papers. The gap between "I have read these papers" and "I can write with these papers' knowledge" remains wide.
 
-We build this because we need it ourselves. The target user is a single researcher who reads 10-50 papers for a project and wants to produce a literature review, survey, or original paper informed by those sources. The pipeline runs locally, requires no cloud accounts, and stores data in formats the researcher can inspect and version-control.
+We build this because we need it ourselves. The target user is a single researcher who reads 10-50 papers for a project and wants to produce a literature review, survey, or original paper informed by those sources. The pipeline runs on the researcher's machine, stores data locally in formats they can inspect and version-control, and requires internet access only for searching academic sources, downloading papers, and calling the Claude API during extraction and generation.
 
 Table 1 Relationship to Existing Tools
 
 | Tool Category | What It Does | What We Add |
 |---------------|-------------|-------------|
 | Reference managers (Zotero, Mendeley) | Store PDFs, manage citations | Full text extraction, knowledge modeling, generation |
-| Discovery services (Semantic Scholar, arXiv) | Find papers | Automated acquisition into local pipeline |
+| Discovery services (Semantic Scholar, arXiv) | Find papers | Integrated search that feeds directly into acquisition and the rest of the pipeline |
 | PDF converters (GROBID, pdf2text) | Extract text from PDFs | Integration with downstream extraction and storage |
 | Generative AI writing tools | Generate text from prompts | Grounded generation from a structured knowledge base |
 | Note-taking apps (Obsidian, Notion) | Manual knowledge capture | Automated extraction with provenance tracking |
@@ -50,7 +50,8 @@ Table 2 Measurable Outcomes
 
 | Dimension | Metric | Target |
 |-----------|--------|--------|
-| Pipeline completeness | Stages that run without manual handoff | 5 of 5 |
+| Pipeline completeness | Stages that run without manual handoff | 6 of 6 |
+| Search | Relevant papers found for a research query | Top-10 results contain papers a domain expert would select |
 | Acquisition | Papers downloaded from a URL or identifier | Supports arXiv, DOI, direct PDF URLs |
 | Conversion accuracy | Structured text matches source PDF content | Section headings, paragraphs, and figures preserved |
 | Extraction coverage | Claims and methods captured per paper | At least 80% of manually identified items |
@@ -59,7 +60,7 @@ Table 2 Measurable Outcomes
 
 ### What "Done" Looks Like
 
-A researcher types a paper URL into the CLI, and the pipeline downloads the PDF, converts it to structured text, extracts knowledge items, and stores them in a local knowledge base. When the researcher asks the system to draft a section on a topic, it retrieves relevant knowledge items and produces a paragraph with inline citations. The researcher can verify every claim by following the citation back to the source passage. All data lives on disk in version-controllable formats. The entire workflow runs offline after initial paper download.
+A researcher types a research question into the CLI. The pipeline searches academic sources, presents relevant papers, and downloads the selected PDFs. It converts each PDF to structured text, extracts knowledge items, and stores them in a local knowledge base. When the researcher asks the system to draft a section on a topic, it retrieves relevant knowledge items and produces a paragraph with inline citations. The researcher can verify every claim by following the citation back to the source passage. All data lives on disk in version-controllable formats. The search, extraction, and generation stages require internet access for API calls (academic search APIs and Claude); conversion and storage run fully offline.
 
 ### Implementation Phases
 
@@ -68,7 +69,7 @@ Table 3 Implementation Phases
 | Phase | Focus | Deliverables |
 |-------|-------|-------------|
 | Foundation | Documentation and scaffolding | VISION, ARCHITECTURE, PRDs for each stage, Mage project skeleton |
-| Core Pipeline | Paper acquisition and PDF conversion | Acquire stage (URL/DOI/arXiv download), Convert stage (PDF to structured text) |
+| Core Pipeline | Search, acquisition, and PDF conversion | Search stage (arXiv, Semantic Scholar queries), Acquire stage (URL/DOI/arXiv download), Convert stage (PDF to structured text) |
 | Knowledge | Extraction and storage | Extract stage (claims, methods, definitions from text), Knowledge base (local storage with retrieval) |
 | Generation | Paper writing from knowledge | Generate stage (drafts from knowledge base with citations), Output formatting |
 
@@ -88,7 +89,7 @@ Table 4 Risks and Mitigations
 
 We are not a reference manager. We do not manage bibliographic metadata for large libraries or sync across devices. Use Zotero or Mendeley for that.
 
-We are not a paper discovery tool. We do not crawl or index the literature. Use Semantic Scholar, Google Scholar, or arXiv search to find papers, then feed them into this pipeline.
+We are not a literature crawler. We search academic APIs on demand but do not crawl, mirror, or index the full literature. We find papers relevant to a specific query, not build a comprehensive database.
 
 We are not a hosted service. We do not run in the cloud, store data remotely, or require user accounts. Everything runs locally.
 
