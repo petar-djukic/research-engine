@@ -1,6 +1,6 @@
 # Research Engine
 
-A personal research pipeline that takes academic papers from acquisition through knowledge extraction to new paper generation. The system is a Go command-line tool backed by Mage build targets, designed to run locally on a single machine. Each stage transforms data into a more useful form: raw PDFs become structured text, structured text becomes extracted knowledge, and extracted knowledge feeds into new writing.
+A personal research pipeline that takes academic papers from search through knowledge extraction to new paper generation. The system is a Go command-line tool backed by Mage build targets, designed to run locally on a single machine. The pipeline begins with search: the researcher describes a topic, and the system finds relevant papers across arXiv, Semantic Scholar, and other sources. Search results feed into acquisition, which downloads PDFs. From there, each stage transforms data into a more useful form: raw PDFs become structured text, structured text becomes extracted knowledge, and extracted knowledge feeds into new writing.
 
 See [VISION.md](docs/VISION.md) for project goals and boundaries. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design and data flow.
 
@@ -113,10 +113,11 @@ research-engine/
 
 ## Pipeline Stages
 
-The pipeline has five stages, each exposed as a Mage target:
+The pipeline has six stages, each exposed as a Mage target:
 
 | Stage          | Mage Target      | Description                                       | PRD                                                                                 |
 | -------------- | ---------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Search         | `mage search`    | Find relevant papers across academic sources      | [prd006-search](docs/specs/product-requirements/prd006-search.yaml)                 |
 | Acquisition    | `mage download`  | Download papers from arXiv, DOI, or URL           | [prd001-acquisition](docs/specs/product-requirements/prd001-acquisition.yaml)       |
 | Conversion     | `mage convert`   | Transform PDFs into structured Markdown           | [prd002-conversion](docs/specs/product-requirements/prd002-conversion.yaml)         |
 | Extraction     | `mage extract`   | Pull claims, methods, and definitions from text   | [prd003-extraction](docs/specs/product-requirements/prd003-extraction.yaml)         |

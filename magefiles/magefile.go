@@ -31,12 +31,13 @@ func Init() error {
 	return nil
 }
 
-// Pipeline runs all pipeline stages end-to-end: download, convert, extract, index, draft.
+// Pipeline runs all pipeline stages end-to-end: search, download, convert, extract, index, draft.
 func Pipeline() error {
 	stages := []struct {
 		name string
 		fn   func() error
 	}{
+		{"search", Search},
 		{"download", Download},
 		{"convert", Convert},
 		{"extract", Extract},
