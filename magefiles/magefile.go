@@ -1,5 +1,5 @@
-// Package main contains Mage build targets for the research-engine pipeline.
-// Implements: docs/ARCHITECTURE § Pipeline Interface (Mage targets).
+// Package main contains Mage build targets for research-engine developer tooling.
+// Implements: docs/ARCHITECTURE § Developer Tooling.
 package main
 
 import (
@@ -28,30 +28,6 @@ func Init() error {
 		fmt.Println("  ", dir)
 	}
 	fmt.Println("Project directories initialized.")
-	return nil
-}
-
-// Pipeline runs all pipeline stages end-to-end: search, download, convert, extract, index, draft.
-func Pipeline() error {
-	stages := []struct {
-		name string
-		fn   func() error
-	}{
-		{"search", Search},
-		{"download", Download},
-		{"convert", Convert},
-		{"extract", Extract},
-		{"index", Index},
-		{"draft", Draft},
-	}
-
-	for _, s := range stages {
-		fmt.Printf("=== %s ===\n", s.name)
-		if err := s.fn(); err != nil {
-			return fmt.Errorf("stage %s: %w", s.name, err)
-		}
-	}
-	fmt.Println("Pipeline complete.")
 	return nil
 }
 
