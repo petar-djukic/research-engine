@@ -2,19 +2,20 @@
 
 ## System Overview
 
-We build a five-stage pipeline that transforms academic papers into a structured knowledge base and uses that knowledge to generate new documents. Papers enter the system as URLs or file paths and flow through acquisition, conversion, extraction, storage, and generation. Each stage reads from the local filesystem and writes back to it, producing artifacts in human-readable formats. Mage build targets orchestrate the stages so a researcher can run the full pipeline or invoke any stage independently.
+We build a six-stage pipeline that transforms academic papers into a structured knowledge base and uses that knowledge to generate new documents. The pipeline begins with search: the researcher describes a topic, and the system queries academic APIs to find relevant papers. Search results feed into acquisition, which downloads PDFs. From there, papers flow through conversion, extraction, storage, and generation. Each stage reads from the local filesystem and writes back to it, producing artifacts in human-readable formats. Mage build targets orchestrate the stages so a researcher can run the full pipeline or invoke any stage independently.
 
 The core insight is that research writing depends on structured knowledge, not raw text. By converting unstructured PDFs into typed knowledge items (claims, methods, definitions) with provenance links back to source passages, we make the gap between reading and writing a pipeline problem rather than a manual effort.
 
 ### Pipeline Lifecycle
 
-A paper moves through five states, one per pipeline stage:
+A paper moves through six states, one per pipeline stage:
 
-1. Acquired: the raw PDF exists on disk with metadata (source URL, DOI, title).
-2. Converted: the PDF has been transformed into structured Markdown with section boundaries.
-3. Extracted: knowledge items have been pulled from the structured text and linked to their source sections.
-4. Stored: knowledge items reside in the knowledge base, indexed for retrieval.
-5. Generated: a draft document exists that draws on stored knowledge items with citations.
+1. Searched: the paper appears as a candidate result from an academic API query, with identifier and metadata.
+2. Acquired: the raw PDF exists on disk with metadata (source URL, DOI, title).
+3. Converted: the PDF has been transformed into structured Markdown with section boundaries.
+4. Extracted: knowledge items have been pulled from the structured text and linked to their source sections.
+5. Stored: knowledge items reside in the knowledge base, indexed for retrieval.
+6. Generated: a draft document exists that draws on stored knowledge items with citations.
 
 Each state is visible as files on disk. A paper's progress through the pipeline is determined by which artifacts exist in the project directory. PRDs define the detailed state transitions and error conditions for each stage.
 
@@ -31,18 +32,21 @@ Data flows forward through the pipeline. Each stage consumes the output of the p
 skinparam backgroundColor white
 skinparam arrowColor #333333
 
+rectangle "Search" as srch
 rectangle "Acquisition" as acq
 rectangle "Conversion" as conv
 rectangle "Extraction" as ext
 rectangle "Knowledge Base" as kb
 rectangle "Generation" as gen
 
+srch -right-> acq : Identifiers + metadata
 acq -right-> conv : PDF + metadata
 conv -right-> ext : Structured Markdown
 ext -right-> kb : Knowledge items
 kb -right-> gen : Retrieved items
 
-note bottom of acq : URL/DOI/path\n-> raw PDF
+note bottom of srch : Research query\n-> candidate papers
+note bottom of acq : Identifier/URL\n-> raw PDF
 note bottom of conv : PDF\n-> sections, paragraphs
 note bottom of ext : Markdown\n-> claims, methods
 note bottom of kb : Items\n-> indexed store
@@ -51,11 +55,11 @@ note bottom of gen : Query + items\n-> draft with citations
 @enduml
 ```
 
-|Figure 1 Pipeline data flow from acquisition through generation |
+|Figure 1 Pipeline data flow from search through generation |
 
 ## Pipeline Interface
 
-The pipeline operates on three data structures that flow between stages. We describe them here at the architecture level; PRDs specify the full field definitions and validation rules.
+The pipeline operates on four data structures that flow between stages. We describe them here at the architecture level; PRDs specify the full field definitions and validation rules.
 
 ### Data Structures
 
@@ -63,6 +67,7 @@ Table 1 Pipeline Data Structures
 
 | Structure | Role | Produced By | Consumed By |
 |-----------|------|-------------|-------------|
+| SearchResult | A candidate paper from an academic API query (identifier, title, authors, abstract, source, relevance score) | Search | Acquisition (as input identifiers) |
 | Paper | Metadata and file paths for an acquired paper (URL, DOI, title, authors, PDF path) | Acquisition | Conversion, Extraction |
 | KnowledgeItem | A typed extraction from a paper (claim, method, definition) with provenance (paper ID, section, page) | Extraction | Knowledge Base, Generation |
 | Draft | A generated document section with inline citations linking claims to KnowledgeItems | Generation | Researcher (final output) |
@@ -73,6 +78,7 @@ Table 2 Pipeline Operations
 
 | Stage | Operation | Input | Output | Description |
 |-------|-----------|-------|--------|-------------|
+| Search | Search | Research query (free-text or structured) | List of SearchResults | Queries academic APIs, deduplicates, and ranks candidate papers |
 | Acquisition | Acquire | URL, DOI, or file path | Paper record + PDF on disk | Downloads or copies the PDF and creates metadata |
 | Conversion | Convert | Paper record | Structured Markdown file | Transforms PDF into sections, paragraphs, and figure references |
 | Extraction | Extract | Structured Markdown | List of KnowledgeItems | Identifies claims, methods, and definitions with provenance |
@@ -83,6 +89,12 @@ Table 2 Pipeline Operations
 Each operation is a Mage target. PRDs define the full signatures, preconditions, postconditions, and error handling for each operation.
 
 ## System Components
+
+### Search
+
+We query academic APIs to find papers relevant to a research question. The search component accepts free-text queries or structured parameters (author, keywords, date range), fans them out to multiple backends (arXiv API, Semantic Scholar API), deduplicates results across sources, and returns a ranked list of candidate papers. Each result carries an identifier that the acquisition stage can consume directly, along with title, authors, abstract, and a relevance score. The backend interface is extensible so we can add sources without modifying existing backend code.
+
+See PRD: Paper Search for query interface, backend requirements, deduplication rules, and output format.
 
 ### Acquisition
 
@@ -134,11 +146,11 @@ We implement the pipeline in Go rather than Python. Go produces static binaries 
 
 Benefits: static binaries, compile-time safety, single-binary distribution. The tradeoff is fewer research-focused libraries, which we mitigate by calling external tools.
 
-### Decision 4 Local-First, Offline After Acquisition
+### Decision 4 Local-First with Selective Internet Access
 
-We store all data locally and require network access only during the acquisition stage (to download papers) and during extraction/generation (to call Generative AI APIs). All other stages run fully offline. The researcher owns their data and can inspect every file. We do not sync to cloud services.
+We store all data locally and require network access for three activities: search (to query academic APIs), acquisition (to download papers), and extraction/generation (to call Generative AI APIs). Conversion and storage run fully offline. The researcher owns their data and can inspect every file. We do not sync to cloud services.
 
-Benefits: data ownership, privacy, offline operation, version-controllable artifacts.
+Benefits: data ownership, privacy, offline operation for conversion and storage, version-controllable artifacts.
 
 ### Decision 5 Generative AI for Extraction and Generation
 
@@ -154,6 +166,7 @@ Table 3 Technology Choices
 |-----------|-----------|---------|
 | Implementation language | Go | Pipeline implementation, CLI, type safety |
 | Build and orchestration | Mage | Pipeline target orchestration, dependency resolution |
+| Academic search | arXiv API, Semantic Scholar API | Query academic sources for candidate papers |
 | PDF conversion | GROBID or pdftotext (external) | Transform PDF to structured text |
 | Knowledge storage | JSON/YAML files | Human-readable, version-controllable item storage |
 | Knowledge indexing | SQLite or in-memory | Retrieval index for knowledge items |
@@ -172,6 +185,7 @@ research-engine/
     research-engine/       # CLI entry point
       main.go
   internal/
+    search/                # Search stage implementation
     acquire/               # Acquisition stage implementation
     convert/               # PDF conversion stage
     extract/               # Knowledge extraction stage
@@ -181,6 +195,7 @@ research-engine/
   pkg/
     types/                 # Shared types: Paper, KnowledgeItem, Draft
   magefiles/
+    search.go              # Mage targets for search
     acquire.go             # Mage targets for acquisition
     convert.go             # Mage targets for conversion
     extract.go             # Mage targets for extraction
@@ -206,26 +221,27 @@ Table 4 Package Roles
 | Directory | Role |
 |-----------|------|
 | cmd/research-engine/ | CLI entry point. Parses flags, wires dependencies, starts pipeline. |
+| internal/search/ | Queries academic APIs, deduplicates and ranks candidate papers. |
 | internal/acquire/ | Downloads papers, resolves identifiers, creates Paper records. |
 | internal/convert/ | Invokes PDF conversion tools, produces structured Markdown. |
 | internal/extract/ | Calls Generative AI to classify and extract KnowledgeItems. |
 | internal/knowledge/ | Persists KnowledgeItems, builds and queries the retrieval index. |
 | internal/generate/ | Retrieves items, calls Generative AI, produces cited drafts. |
 | internal/pipeline/ | Sequences stages, manages per-paper state progression. |
-| pkg/types/ | Shared data structures: Paper, KnowledgeItem, Draft, Config. |
+| pkg/types/ | Shared data structures: SearchResult, Paper, KnowledgeItem, Draft, Config. |
 | magefiles/ | Mage build targets. One file per pipeline stage plus orchestration. |
 | tests/integration/ | Tests that run multiple stages end-to-end. |
 
 ## Implementation Status
 
-We are in the Foundation phase. Documentation is the current focus: VISION.md is complete, ARCHITECTURE.md is in progress, and PRDs for each pipeline stage come next. No code has been written yet.
+We are completing the Foundation phase. VISION.md is complete, ARCHITECTURE.md is updated for the six-stage pipeline, and PRDs exist for all six stages. Mage scaffolding is in place. No stage implementation code has been written yet.
 
 Table 5 Implementation Phases
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| Foundation | In progress | VISION complete; ARCHITECTURE and PRDs in progress |
-| Core Pipeline | Not started | Acquisition and Conversion stages |
+| Foundation | Nearing completion | VISION complete; ARCHITECTURE updated; PRDs for all six stages complete; Mage scaffolding in place |
+| Core Pipeline | Not started | Search, Acquisition, and Conversion stages |
 | Knowledge | Not started | Extraction and Knowledge Base |
 | Generation | Not started | Draft generation with citations |
 
@@ -236,6 +252,7 @@ Table 6 Related Documents
 | Document | Role |
 |----------|------|
 | VISION.md | Project purpose, success criteria, and boundaries |
+| PRD: Paper Search | Requirements for querying academic APIs and ranking results |
 | PRD: Paper Acquisition | Requirements for downloading and resolving papers |
 | PRD: PDF Conversion | Requirements for transforming PDFs to structured text |
 | PRD: Knowledge Extraction | Requirements for identifying typed knowledge items |
