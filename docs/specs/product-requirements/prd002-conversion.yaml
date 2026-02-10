@@ -61,10 +61,16 @@ requirements:
   R5:
     title: Conversion Backend
     items:
-      - R5.1: Convert must support at least one external conversion tool (GROBID or pdftotext) invoked as a subprocess
+      - R5.1: Convert must support three conversion backends invoked as subprocesses — GROBID, pdftotext, and markitdown (container-based)
       - R5.2: Convert must accept a configuration option to select the conversion backend
       - R5.3: Convert must return a descriptive error when the configured backend is not installed or not found on PATH
       - R5.4: Convert must apply post-processing to the backend output to normalize section headings, strip artifacts, and insert page markers
+      - R5.5: The markitdown backend must run inside a container using the markitdown:latest image, piping the PDF via stdin and capturing Markdown on stdout
+      - R5.6: Convert must provide a runtime auto-detection function that checks for docker first and falls back to podman if docker is unavailable
+      - R5.7: The runtime auto-detection function must verify the binary exists on PATH (e.g. "docker" or "podman") and return the name of the available runtime
+      - R5.8: Before invoking the markitdown container, Convert must verify the markitdown:latest image exists locally by running the equivalent of "docker image inspect markitdown:latest" or "podman image exists markitdown:latest" using the detected runtime
+      - R5.9: Convert must return a descriptive error when no container runtime (docker or podman) is available
+      - R5.10: Convert must return a descriptive error when the markitdown:latest image is not found locally
 
   R6:
     title: Batch Processing
@@ -79,8 +85,9 @@ non_goals:
   - We do not extract images or figures from PDFs; figures are represented as placeholders
   - We do not produce pixel-perfect Markdown that replicates the PDF layout; 80% structural fidelity is the target
   - We do not support non-English papers in this phase; multi-language support may come later
-  - We do not build our own PDF parser; we depend on external tools (GROBID, pdftotext, or OCR engines)
+  - We do not build our own PDF parser; we depend on external tools (GROBID, pdftotext, markitdown container, or OCR engines)
   - We do not handle supplementary materials or appendices differently from the main text
+  - We do not require both docker and podman to be installed; one container runtime is sufficient for the markitdown backend
 
 acceptance_criteria:
   - Convert produces a Markdown file with correct section headings for a standard single-column paper
