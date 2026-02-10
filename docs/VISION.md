@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This is a personal research pipeline that takes academic papers from search through knowledge extraction to new paper generation. The system is a Go command-line tool backed by Mage build targets, designed to run locally on a single machine. The pipeline begins with search: the researcher describes a topic or question, and the system finds relevant papers across arXiv, Semantic Scholar, and other sources. Search results feed directly into acquisition, which downloads the PDFs. From there, each stage transforms data into a more useful form: raw PDFs become structured text, structured text becomes extracted knowledge, and extracted knowledge feeds into new writing.
+This is a personal research pipeline that takes academic papers from search through knowledge extraction to new paper generation. The system is a Go CLI that exposes each pipeline stage as a subcommand, designed to run locally on a single machine. The pipeline begins with search: the researcher describes a topic or question, and the system finds relevant papers across arXiv, Semantic Scholar, and other sources. Search results feed directly into acquisition, which downloads the PDFs. From there, each stage transforms data into a more useful form: raw PDFs become structured text, structured text becomes extracted knowledge, and extracted knowledge feeds into new writing.
 
 We are not a citation manager, a paper database, or a hosted service. We are a local, opinionated pipeline that a single researcher operates to turn reading into writing.
 
@@ -20,7 +20,7 @@ Existing tools optimize for one stage. Zotero manages references. Semantic Schol
 
 ### What We Do
 
-We define a pipeline with six stages: search, acquire, convert, extract, store, and generate. A Go CLI orchestrates these stages through Mage build targets. The researcher starts with a topic or question; search finds relevant papers across academic sources and feeds their identifiers into acquisition. From there, papers move through each stage, accumulating structured metadata and extracted knowledge along the way. The pipeline stores everything locally in a well-defined directory structure. When the researcher is ready to write, the generation stage draws on the accumulated knowledge base to produce drafts that cite their sources.
+We define a pipeline with six stages: search, acquire, convert, extract, store, and generate. A Go CLI exposes each stage as a subcommand. The researcher starts with a topic or question; search finds relevant papers across academic sources and feeds their identifiers into acquisition. From there, papers move through each stage, accumulating structured metadata and extracted knowledge along the way. The pipeline stores everything locally in a well-defined directory structure. When the researcher is ready to write, the generation stage draws on the accumulated knowledge base to produce drafts that cite their sources.
 
 The pipeline treats each stage as an independent, composable step. A researcher can run the full pipeline or invoke individual stages. All intermediate artifacts persist on disk in human-readable formats.
 
@@ -68,7 +68,7 @@ Table 3 Implementation Phases
 
 | Phase | Focus | Deliverables |
 |-------|-------|-------------|
-| Foundation | Documentation and scaffolding | VISION, ARCHITECTURE, PRDs for each stage, Mage project skeleton |
+| Foundation | Documentation and scaffolding | VISION, ARCHITECTURE, PRDs for each stage, Cobra CLI skeleton |
 | Core Pipeline | Search, acquisition, and PDF conversion | Search stage (arXiv, Semantic Scholar queries), Acquire stage (URL/DOI/arXiv download), Convert stage (PDF to structured text) |
 | Knowledge | Extraction and storage | Extract stage (claims, methods, definitions from text), Knowledge base (local storage with retrieval) |
 | Generation | Paper writing from knowledge | Generate stage (drafts from knowledge base with citations), Output formatting |
