@@ -1,0 +1,167 @@
+id: test-rel01.0-uc002-paper-acquisition
+title: Paper Acquisition by Identifier
+description: >
+  Validates that the acquisition stage downloads papers from arXiv IDs,
+  DOIs, and direct PDF URLs, stores PDFs with predictable naming, extracts
+  metadata, and handles errors and batch processing correctly.
+traces:
+  - rel01.0-uc002-paper-acquisition
+  - prd001-acquisition
+tags:
+  - cli
+  - acquisition
+  - smoke
+
+preconditions:
+  - Network access is available for arXiv and CrossRef APIs
+  - The papers/ directory does not exist or is empty
+  - No prior Paper records exist
+
+test_cases:
+  - name: Acquire paper by arXiv ID
+    inputs:
+      command: research-engine acquire 2301.07041
+    expected:
+      exit_code: 0
+      stdout_contains: "downloading"
+      files:
+        papers/raw/2301.07041.pdf:
+          exists: true
+          min_size_bytes: 1000
+        papers/metadata/2301.07041.yaml:
+          exists: true
+          contains: "id: 2301.07041"
+          contains_also: "title:"
+
+  - name: Acquire paper by arXiv ID with prefix
+    inputs:
+      command: research-engine acquire arXiv:2301.07041
+    expected:
+      exit_code: 0
+      files:
+        papers/raw/2301.07041.pdf:
+          exists: true
+
+  - name: Acquire paper by DOI
+    inputs:
+      command: research-engine acquire 10.1145/1234567.1234568
+    expected:
+      exit_code: 0
+      stdout_contains: "downloading"
+      files:
+        papers/raw/10-1145-1234567-1234568.pdf:
+          exists: true
+        papers/metadata/10-1145-1234567-1234568.yaml:
+          exists: true
+          contains: "source_url:"
+
+  - name: Acquire paper by direct PDF URL
+    inputs:
+      command: research-engine acquire https://example.com/paper.pdf
+    expected:
+      exit_code: 0
+      files:
+        papers/metadata/paper.yaml:
+          exists: true
+          contains: "source_url: https://example.com/paper.pdf"
+
+  - name: Skip download when PDF already exists
+    inputs:
+      command: research-engine acquire 2301.07041
+      files:
+        papers/raw/2301.07041.pdf: "<existing PDF content>"
+        papers/metadata/2301.07041.yaml: "id: 2301.07041\ntitle: Existing\n"
+    expected:
+      exit_code: 0
+      stdout_contains: "skipped"
+
+  - name: Fail with descriptive error for unrecognized identifier
+    inputs:
+      command: research-engine acquire not-a-valid-id
+    expected:
+      exit_code: 1
+      stderr_contains: "unrecognized identifier"
+
+  - name: Fail with descriptive error on network failure
+    inputs:
+      command: research-engine acquire 9999.99999
+      env:
+        HTTP_TIMEOUT: "1ms"
+    expected:
+      exit_code: 1
+      stderr_contains: "failed"
+
+  - name: No orphaned files on download failure
+    inputs:
+      command: research-engine acquire 9999.99999
+    expected:
+      exit_code: 1
+      state:
+        files_in_papers_raw: 0
+
+  - name: Create papers directories when they do not exist
+    inputs:
+      command: research-engine acquire 2301.07041
+      precondition: papers/ directory does not exist
+    expected:
+      exit_code: 0
+      files:
+        papers/raw/:
+          exists: true
+        papers/metadata/:
+          exists: true
+
+  - name: arXiv metadata includes title authors date and abstract
+    inputs:
+      command: research-engine acquire 2301.07041
+    expected:
+      exit_code: 0
+      files:
+        papers/metadata/2301.07041.yaml:
+          contains: "title:"
+          contains_also: "authors:"
+          contains_also2: "date:"
+          contains_also3: "abstract:"
+
+  - name: Direct URL metadata has source URL but empty other fields
+    inputs:
+      command: research-engine acquire https://example.com/unknown-paper.pdf
+    expected:
+      exit_code: 0
+      files:
+        papers/metadata/unknown-paper.yaml:
+          contains: "source_url: https://example.com/unknown-paper.pdf"
+          title_empty: true
+
+  - name: Batch acquisition continues after individual failure
+    inputs:
+      command: research-engine acquire 2301.07041 not-a-valid-id 2303.08774
+    expected:
+      exit_code: 1
+      stdout_contains: "downloaded: 2"
+      stdout_contains_also: "failed: 1"
+      files:
+        papers/raw/2301.07041.pdf:
+          exists: true
+        papers/raw/2303.08774.pdf:
+          exists: true
+
+  - name: Batch acquisition reports summary
+    inputs:
+      command: research-engine acquire 2301.07041 2303.08774
+    expected:
+      exit_code: 0
+      stdout_contains: "downloaded:"
+      stdout_contains_also: "skipped:"
+      stdout_contains_also2: "failed:"
+
+  - name: User-Agent header is set on HTTP requests
+    inputs:
+      command: research-engine acquire 2301.07041
+    expected:
+      exit_code: 0
+      state:
+        http_user_agent_contains: "research-engine"
+
+cleanup:
+  - Remove papers/ test directory

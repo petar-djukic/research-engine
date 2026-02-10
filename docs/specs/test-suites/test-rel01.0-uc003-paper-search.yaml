@@ -1,0 +1,163 @@
+id: test-rel01.0-uc003-paper-search
+title: Academic Paper Search
+description: >
+  Validates that the search stage queries arXiv and Semantic Scholar,
+  deduplicates and ranks results, supports structured queries, handles
+  backend failures gracefully, and produces human-readable and JSON output.
+traces:
+  - rel01.0-uc003-paper-search
+  - prd006-search
+tags:
+  - cli
+  - search
+  - smoke
+
+preconditions:
+  - Network access is available for arXiv and Semantic Scholar APIs
+  - Both search backends are enabled in configuration
+
+test_cases:
+  - name: Free-text query returns arXiv results
+    inputs:
+      command: research-engine search "attention mechanisms in transformers"
+    expected:
+      exit_code: 0
+      stdout_contains: "arXiv"
+      state:
+        result_count_min: 1
+
+  - name: Free-text query returns Semantic Scholar results
+    inputs:
+      command: research-engine search "attention mechanisms in transformers"
+    expected:
+      exit_code: 0
+      stdout_contains: "S2"
+      state:
+        result_count_min: 1
+
+  - name: Combined results are deduplicated
+    inputs:
+      command: research-engine search "attention is all you need"
+    expected:
+      exit_code: 0
+      stdout_contains: "duplicates removed:"
+      state:
+        no_duplicate_identifiers: true
+
+  - name: Structured query filters by author
+    inputs:
+      command: research-engine search --author "Vaswani" "attention"
+    expected:
+      exit_code: 0
+      state:
+        all_results_contain_author: "Vaswani"
+
+  - name: Structured query filters by date range
+    inputs:
+      command: research-engine search --from 2023-01-01 --to 2023-12-31 "large language models"
+    expected:
+      exit_code: 0
+      state:
+        all_results_within_date_range: true
+
+  - name: Maximum results parameter limits output
+    inputs:
+      command: research-engine search --max-results 5 "machine learning"
+    expected:
+      exit_code: 0
+      state:
+        result_count_max: 5
+
+  - name: Empty query returns descriptive error
+    inputs:
+      command: research-engine search ""
+    expected:
+      exit_code: 1
+      stderr_contains: "empty"
+
+  - name: Search continues when one backend fails
+    inputs:
+      command: research-engine search "transformer architecture"
+      env:
+        SEARCH_ARXIV_URL: "https://invalid.example.com"
+    expected:
+      exit_code: 0
+      stderr_contains: "arXiv"
+      state:
+        result_count_min: 1
+        results_from: "S2"
+
+  - name: Search fails when all backends are disabled
+    inputs:
+      command: research-engine search --disable-arxiv --disable-s2 "any query"
+    expected:
+      exit_code: 1
+      stderr_contains: "no backends"
+
+  - name: Each result includes an acquisition identifier
+    inputs:
+      command: research-engine search --json "attention mechanisms"
+    expected:
+      exit_code: 0
+      stdout_json:
+        each_result_has: "acquisition_id"
+
+  - name: Each result includes a relevance score
+    inputs:
+      command: research-engine search --json "attention mechanisms"
+    expected:
+      exit_code: 0
+      stdout_json:
+        each_result_has: "relevance_score"
+        relevance_scores_between: [0.0, 1.0]
+
+  - name: JSON output contains all SearchResult fields
+    inputs:
+      command: research-engine search --json "attention mechanisms"
+    expected:
+      exit_code: 0
+      stdout_json:
+        each_result_has_fields:
+          - "identifier"
+          - "title"
+          - "authors"
+          - "abstract"
+          - "date"
+          - "source"
+          - "relevance_score"
+          - "acquisition_id"
+
+  - name: Human-readable output shows table with rank title authors year
+    inputs:
+      command: research-engine search "attention mechanisms"
+    expected:
+      exit_code: 0
+      stdout_contains: "Rank"
+      stdout_contains_also: "Title"
+
+  - name: Results are ranked by relevance
+    inputs:
+      command: research-engine search --json "attention is all you need"
+    expected:
+      exit_code: 0
+      state:
+        results_sorted_by_relevance: true
+
+  - name: Rate limiting delays are applied between API calls
+    inputs:
+      command: research-engine search "attention mechanisms"
+    expected:
+      exit_code: 0
+      state:
+        min_elapsed_seconds: 3
+
+  - name: Summary shows total results and duplicates removed
+    inputs:
+      command: research-engine search "attention mechanisms"
+    expected:
+      exit_code: 0
+      stdout_contains: "results:"
+      stdout_contains_also: "duplicates removed:"
+
+cleanup:
+  - No filesystem cleanup needed (search does not write to disk)

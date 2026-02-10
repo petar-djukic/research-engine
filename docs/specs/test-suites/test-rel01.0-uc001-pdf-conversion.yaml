@@ -1,0 +1,190 @@
+id: test-rel01.0-uc001-pdf-conversion
+title: PDF to Structured Markdown Conversion
+description: >
+  Validates that the conversion stage transforms PDF files into structured
+  Markdown with section headings, paragraph boundaries, page markers, and
+  YAML frontmatter. Covers container runtime detection, single and
+  multi-column layouts, idempotent skipping, and batch processing.
+traces:
+  - rel01.0-uc001-pdf-conversion
+  - prd002-conversion
+tags:
+  - cli
+  - conversion
+  - smoke
+
+preconditions:
+  - A container runtime (docker or podman) is installed and available on PATH
+  - The markitdown:latest container image exists locally
+  - The papers/raw/ directory contains at least one valid PDF file
+  - The papers/metadata/ directory contains a corresponding Paper YAML record
+
+test_cases:
+  - name: Detect docker as primary container runtime
+    inputs:
+      env:
+        PATH: "/usr/bin:/usr/local/bin"
+      precondition: docker is installed and on PATH
+    expected:
+      runtime_detected: docker
+      exit_code: 0
+
+  - name: Fall back to podman when docker is unavailable
+    inputs:
+      env:
+        PATH: "/usr/bin:/usr/local/bin"
+      precondition: docker is not installed; podman is installed and on PATH
+    expected:
+      runtime_detected: podman
+      exit_code: 0
+
+  - name: Fail when no container runtime is available
+    inputs:
+      env:
+        PATH: "/usr/bin"
+      precondition: neither docker nor podman is installed
+    expected:
+      exit_code: 1
+      stderr_contains: "no container runtime found"
+
+  - name: Fail when markitdown image does not exist
+    inputs:
+      precondition: docker is installed but markitdown:latest image is not present
+    expected:
+      exit_code: 1
+      stderr_contains: "markitdown"
+
+  - name: Convert a single-column PDF to Markdown
+    inputs:
+      command: research-engine convert papers/raw/2301.07041.pdf
+      files:
+        papers/raw/2301.07041.pdf: "<valid single-column academic PDF>"
+        papers/metadata/2301.07041.yaml: "id: 2301.07041\nsource_url: https://arxiv.org/pdf/2301.07041\n"
+    expected:
+      exit_code: 0
+      stdout_contains: "converting"
+      files:
+        papers/markdown/2301.07041.md:
+          exists: true
+          contains_frontmatter: true
+          contains_section_headings: true
+          contains_page_markers: true
+
+  - name: Convert a two-column PDF to Markdown with merged columns
+    inputs:
+      command: research-engine convert papers/raw/two-column-sample.pdf
+      files:
+        papers/raw/two-column-sample.pdf: "<valid two-column academic PDF>"
+        papers/metadata/two-column-sample.yaml: "id: two-column-sample\n"
+    expected:
+      exit_code: 0
+      files:
+        papers/markdown/two-column-sample.md:
+          exists: true
+          columns_merged: true
+
+  - name: Output Markdown contains YAML frontmatter
+    inputs:
+      command: research-engine convert papers/raw/2301.07041.pdf
+    expected:
+      exit_code: 0
+      files:
+        papers/markdown/2301.07041.md:
+          frontmatter_contains:
+            - "id: 2301.07041"
+            - "source_pdf:"
+            - "converted_at:"
+
+  - name: Output Markdown contains page markers at boundaries
+    inputs:
+      command: research-engine convert papers/raw/2301.07041.pdf
+    expected:
+      exit_code: 0
+      files:
+        papers/markdown/2301.07041.md:
+          contains: "<!-- page"
+
+  - name: Abstract is rendered as a distinct section
+    inputs:
+      command: research-engine convert papers/raw/2301.07041.pdf
+    expected:
+      exit_code: 0
+      files:
+        papers/markdown/2301.07041.md:
+          contains: "## Abstract"
+
+  - name: Bibliography is rendered as a list of references
+    inputs:
+      command: research-engine convert papers/raw/2301.07041.pdf
+    expected:
+      exit_code: 0
+      files:
+        papers/markdown/2301.07041.md:
+          contains: "## References"
+
+  - name: Figures are rendered as placeholders
+    inputs:
+      command: research-engine convert papers/raw/paper-with-figures.pdf
+      files:
+        papers/raw/paper-with-figures.pdf: "<valid PDF with figures>"
+        papers/metadata/paper-with-figures.yaml: "id: paper-with-figures\n"
+    expected:
+      exit_code: 0
+      files:
+        papers/markdown/paper-with-figures.md:
+          contains: "[Figure"
+
+  - name: Skip conversion when Markdown output already exists
+    inputs:
+      command: research-engine convert papers/raw/2301.07041.pdf
+      files:
+        papers/markdown/2301.07041.md: "<existing markdown content>"
+    expected:
+      exit_code: 0
+      stdout_contains: "skipped"
+
+  - name: Update Paper metadata with conversion status
+    inputs:
+      command: research-engine convert papers/raw/2301.07041.pdf
+    expected:
+      exit_code: 0
+      files:
+        papers/metadata/2301.07041.yaml:
+          contains: "conversion_status: converted"
+
+  - name: Fail with descriptive error for invalid PDF
+    inputs:
+      command: research-engine convert papers/raw/not-a-pdf.pdf
+      files:
+        papers/raw/not-a-pdf.pdf: "this is not a PDF"
+        papers/metadata/not-a-pdf.yaml: "id: not-a-pdf\n"
+    expected:
+      exit_code: 1
+      stderr_contains: "not a valid PDF"
+
+  - name: Batch conversion continues after individual failure
+    inputs:
+      command: research-engine convert --batch papers/raw/
+      files:
+        papers/raw/good-paper.pdf: "<valid PDF>"
+        papers/raw/bad-paper.pdf: "not a PDF"
+        papers/metadata/good-paper.yaml: "id: good-paper\n"
+        papers/metadata/bad-paper.yaml: "id: bad-paper\n"
+    expected:
+      exit_code: 1
+      stdout_contains: "converted: 1"
+      stdout_contains_also: "failed: 1"
+      files:
+        papers/markdown/good-paper.md:
+          exists: true
+
+  - name: Batch conversion reports summary
+    inputs:
+      command: research-engine convert --batch papers/raw/
+    expected:
+      exit_code: 0
+      stdout_contains: "converted:"
+      stdout_contains_also: "skipped:"
+
+cleanup:
+  - Remove papers/raw/, papers/markdown/, and papers/metadata/ test directories

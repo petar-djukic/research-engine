@@ -1,0 +1,56 @@
+id: rel01.0-uc003-paper-search
+title: Academic Paper Search
+summary: |
+  A researcher describes a topic or research question. The system queries
+  arXiv and Semantic Scholar, deduplicates results across sources, ranks
+  them by relevance, and presents a list of candidate papers. Each result
+  carries an identifier that the acquisition stage can consume directly,
+  eliminating manual identifier copying between tools.
+
+actor: Researcher exploring a research topic
+trigger: Researcher runs the search command with a free-text query or structured parameters
+
+flow:
+  - F1: "Parse query: accept a free-text research question and optional structured parameters (author, keywords, date range)"
+  - F2: "Fan out to backends: send the query to each enabled backend (arXiv API, Semantic Scholar API) with appropriate rate limiting"
+  - F3: "Collect results: gather SearchResult records from each backend, handling timeouts and partial failures gracefully"
+  - F4: "Deduplicate: match results across backends by DOI, arXiv ID, or normalized title; merge metadata from both sources"
+  - F5: "Rank results: score each result by relevance to the query, with optional recency bias for recent publications"
+  - F6: "Format output: print a human-readable table to stdout (rank, title, authors, year, source); support --json flag for full SearchResult list"
+  - F7: "Report summary: print total results and number of duplicates removed"
+
+touchpoints:
+  - T1: "Search component: Search operation (prd006-search R1-R5)"
+  - T2: "arXiv API: export.arxiv.org query interface (prd006-search R2.1)"
+  - T3: "Semantic Scholar API: Academic Graph API query interface (prd006-search R2.2)"
+  - T4: "SearchResult type: pkg/types SearchResult struct (prd006-search R4.1)"
+
+success_criteria:
+  - S1: Search returns results for a free-text query against the arXiv API
+  - S2: Search returns results for a free-text query against the Semantic Scholar API
+  - S3: Search returns combined, deduplicated results when both backends are enabled
+  - S4: Search accepts structured parameters (author, keywords, date range) and narrows results accordingly
+  - S5: Search returns a descriptive error when the query is empty
+  - S6: Search continues with partial results when one backend fails (network error, API error, timeout)
+  - S7: Each result includes an identifier (arXiv ID, DOI, or URL) that the acquisition stage can consume directly
+  - S8: JSON output flag produces valid JSON with all SearchResult fields
+  - S9: Rate limiting delays are applied between API calls (arXiv 3s, Semantic Scholar per their limits)
+  - S10: Results include a relevance score between 0.0 and 1.0
+
+out_of_scope:
+  - Citation graph traversal (cited-by, references)
+  - Full-text search within paper contents
+  - Caching search results between invocations
+  - Authentication for paywalled publishers
+  - Building a local search index
+
+test_suite: test-rel01.0-uc003-paper-search
+
+dependencies:
+  - D1: prd006-search (search requirements)
+  - D2: pkg/types SearchResult struct (shared data structure)
+
+risks:
+  - K1: "arXiv API rate limits restrict throughput | Enforce 3-second delay between arXiv requests; queue backend calls sequentially"
+  - K2: "Semantic Scholar API changes or becomes unavailable | Each backend is independently disableable; search degrades gracefully with remaining backends"
+  - K3: "Deduplication misses papers with different titles across sources | Use DOI and arXiv ID matching first; fall back to normalized title similarity"

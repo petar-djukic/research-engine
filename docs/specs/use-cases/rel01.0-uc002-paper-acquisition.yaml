@@ -1,0 +1,54 @@
+id: rel01.0-uc002-paper-acquisition
+title: Paper Acquisition by Identifier
+summary: |
+  A researcher has an arXiv ID, DOI, or direct PDF URL for a paper they want
+  to add to the pipeline. The system resolves the identifier to a PDF download
+  URL, downloads the file to a local directory with a predictable name,
+  extracts metadata (title, authors, abstract), and records provenance so
+  every downstream stage can trace data back to the source.
+
+actor: Researcher with a paper identifier (arXiv ID, DOI, or PDF URL)
+trigger: Researcher runs the acquire command with one or more paper identifiers
+
+flow:
+  - F1: "Parse identifier: determine whether the input is an arXiv ID, DOI, or direct PDF URL"
+  - F2: "Resolve to PDF URL: for arXiv, map the ID to the PDF download URL at arxiv.org; for DOI, resolve via content negotiation; for direct URLs, use as-is"
+  - F3: "Check idempotency: skip download if papers/raw/<slug>.pdf already exists on disk"
+  - F4: "Download PDF: fetch the PDF to a temporary file, then rename to papers/raw/<slug>.pdf on success"
+  - F5: "Extract metadata: for arXiv papers, query the arXiv API for title, authors, date, and abstract; for DOI papers, query CrossRef; for direct URLs, record the URL and leave other fields empty"
+  - F6: "Write metadata: save the Paper record to papers/metadata/<slug>.yaml"
+  - F7: "Report status: print downloading/skipped/failed for each paper; print batch summary"
+
+touchpoints:
+  - T1: "Acquisition component: Acquire operation (prd001-acquisition R1-R5)"
+  - T2: "arXiv API: identifier resolution and metadata retrieval (prd001-acquisition R1.1, R3.3)"
+  - T3: "CrossRef API: DOI metadata retrieval (prd001-acquisition R3.4)"
+  - T4: "File system: papers/raw/ (PDFs), papers/metadata/ (YAML records)"
+  - T5: "Paper type: pkg/types Paper struct (prd001-acquisition R3.2)"
+
+success_criteria:
+  - S1: Acquire downloads a PDF given an arXiv ID (e.g. "2301.07041") and creates a Paper metadata record with title, authors, date, and abstract
+  - S2: Acquire downloads a PDF given a DOI and creates a Paper metadata record
+  - S3: Acquire downloads a PDF given a direct URL and creates a Paper metadata record with the source URL populated
+  - S4: Acquire skips the download when the PDF already exists on disk and returns the existing record
+  - S5: Acquire returns a descriptive error for an unrecognized identifier format
+  - S6: Acquire returns a descriptive error when the network request fails (timeout, 404, connection error)
+  - S7: Partial downloads do not leave orphaned files (temporary file pattern)
+  - S8: Batch acquisition continues after individual failures and reports a summary (downloaded, skipped, failed)
+
+out_of_scope:
+  - Searching for papers (handled by Search stage, rel01.0-uc003)
+  - Parsing or validating PDF content (handled by Conversion stage, rel01.0-uc001)
+  - Authentication for paywalled sources
+  - Deduplicating papers with both arXiv ID and DOI pointing to the same content
+
+test_suite: test-rel01.0-uc002-paper-acquisition
+
+dependencies:
+  - D1: prd001-acquisition (acquisition requirements)
+  - D2: pkg/types Paper struct (shared data structure)
+
+risks:
+  - K1: "arXiv or CrossRef API changes break identifier resolution | Pin API versions; validate response structure before parsing"
+  - K2: "Publisher blocks automated downloads | Support manual PDF import as fallback; set descriptive User-Agent header"
+  - K3: "Large PDFs cause timeout during download | Configurable HTTP timeout (default 60s); temporary file prevents partial artifacts"

@@ -1,0 +1,42 @@
+releases:
+  - version: "01.0"
+    name: Core Pipeline
+    status: not_started
+    focus: |
+      Search, acquisition, and PDF conversion stages. A researcher queries
+      academic APIs, downloads papers, and converts PDFs to structured Markdown.
+    use_cases:
+      - id: rel01.0-uc001-pdf-conversion
+        summary: Convert a PDF paper to structured Markdown with section hierarchy and page markers
+        status: not_started
+      - id: rel01.0-uc002-paper-acquisition
+        summary: Acquire a paper by arXiv ID, DOI, or URL and store the PDF with metadata
+        status: not_started
+      - id: rel01.0-uc003-paper-search
+        summary: Search academic APIs for papers matching a research query and return ranked results
+        status: not_started
+
+  - version: "02.0"
+    name: Knowledge
+    status: not_started
+    focus: |
+      Extraction and knowledge base stages. Structured Markdown becomes typed
+      knowledge items stored in a queryable local database.
+    use_cases:
+      - id: rel02.0-uc001-knowledge-extraction
+        summary: Extract typed knowledge items from structured Markdown with provenance tracking
+        status: not_started
+      - id: rel02.0-uc002-knowledge-base-storage
+        summary: Store extracted items in SQLite and retrieve them by full-text or structured queries
+        status: not_started
+
+  - version: "03.0"
+    name: Generation
+    status: not_started
+    focus: |
+      Draft generation from the knowledge base. A researcher provides a query
+      or outline and receives a cited draft document.
+    use_cases:
+      - id: rel03.0-uc001-draft-generation
+        summary: Generate a cited draft section from knowledge base content given a query or outline
+        status: not_started

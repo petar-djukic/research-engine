@@ -1,0 +1,56 @@
+id: rel01.0-uc001-pdf-conversion
+title: PDF to Structured Markdown Conversion
+summary: |
+  A researcher has acquired a PDF paper and needs it converted to structured
+  Markdown for downstream extraction. The system invokes a container-based
+  conversion backend (markitdown via docker or podman), transforms the raw
+  output into Markdown with section headings, paragraph boundaries, and page
+  markers, and writes the result alongside the source PDF metadata.
+
+actor: Researcher with a locally stored PDF paper
+trigger: Researcher runs the convert command targeting one or more acquired papers
+
+flow:
+  - F1: "Select conversion backend: detect the available container runtime (docker first, podman fallback) and verify the markitdown image exists"
+  - F2: "Read paper metadata: load the Paper record from papers/metadata/ to determine the PDF path"
+  - F3: "Check idempotency: skip conversion if papers/markdown/<paper-id>.md already exists on disk"
+  - F4: "Invoke conversion: pipe the PDF via stdin to the markitdown container and capture Markdown on stdout"
+  - F5: "Post-process output: identify section headings, normalize heading levels, strip running headers and footers, insert page markers (<!-- page N -->)"
+  - F6: "Write output: save the structured Markdown to papers/markdown/<paper-id>.md with YAML frontmatter (paper ID, source PDF path, conversion timestamp)"
+  - F7: "Update metadata: set conversion status in the Paper metadata record (converted, partial, or failed)"
+  - F8: "Report status: print converting/skipped/failed status for each paper; print batch summary"
+
+touchpoints:
+  - T1: "Conversion component: Convert operation (prd002-conversion R1-R6)"
+  - T2: "Container runtime: docker or podman with markitdown image (prd002-conversion R5)"
+  - T3: "Paper metadata: papers/metadata/ YAML records (prd001-acquisition R3)"
+  - T4: "File system: papers/raw/ (input PDFs), papers/markdown/ (output Markdown)"
+
+success_criteria:
+  - S1: Container runtime (docker or podman) is detected and the markitdown image existence is verified before conversion starts
+  - S2: A single-column PDF produces a Markdown file with correct section headings (##, ###) and paragraph boundaries
+  - S3: A two-column PDF produces a Markdown file with columns merged into reading order
+  - S4: Page markers (<!-- page N -->) appear at page boundaries in the output
+  - S5: The abstract is rendered as a distinct section at the top of the document
+  - S6: The bibliography is rendered as a list of references
+  - S7: The output Markdown begins with YAML frontmatter containing paper ID, PDF path, and timestamp
+  - S8: The Paper metadata record is updated with conversion status
+  - S9: Conversion is skipped when the Markdown output already exists on disk
+  - S10: A batch of papers produces a summary (count of converted, skipped, and failed)
+
+out_of_scope:
+  - Image or figure extraction from PDFs (figures are rendered as placeholders)
+  - OCR for scanned PDFs (future enhancement)
+  - Non-English paper support
+  - Building a custom PDF parser
+
+test_suite: test-rel01.0-uc001-pdf-conversion
+
+dependencies:
+  - D1: prd002-conversion (conversion requirements and backend spec)
+  - D2: prd001-acquisition (Paper metadata record format)
+
+risks:
+  - K1: "PDF layout variety causes inconsistent heading detection | Post-processing normalizes heading levels; accept 80% structural fidelity per PRD"
+  - K2: "Container runtime not installed on researcher's machine | Detect runtime at startup and return a descriptive error with install instructions"
+  - K3: "Markitdown container produces unexpected output format | Validate output structure in post-processing; mark conversion as partial when sections are missing"
