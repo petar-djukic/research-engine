@@ -1,0 +1,93 @@
+id: prd006-search
+title: Paper Search
+problem: |
+  The research pipeline begins with search, but no PRD defines how a
+  researcher queries academic sources from within the tool. Today the
+  researcher must leave the pipeline, open a browser, navigate to arXiv
+  or Semantic Scholar, craft a query, scan results, copy identifiers, and
+  paste them back into the acquisition stage. Each transition loses context:
+  the query that motivated the search, the ranking the researcher applied
+  mentally, and the papers that were rejected. When exploring a new topic
+  the researcher may repeat this loop dozens of times across multiple
+  sources, manually deduplicating results that appear in more than one
+  database.
+
+  We need a search stage that accepts a research question or structured
+  query, fans it out to multiple academic APIs, deduplicates and ranks
+  the combined results, and presents a list of candidate papers with
+  enough metadata for the researcher to decide what to acquire. The output
+  feeds directly into the acquisition stage so papers flow into the
+  pipeline without manual identifier copying.
+
+goals:
+  - G1: Provide a single query interface that searches multiple academic sources and returns unified results
+  - G2: Support both free-text research questions and structured queries (author, title, keywords, date range)
+  - G3: Deduplicate results that appear in more than one source and rank them by relevance
+  - G4: Output a list of candidate papers with identifiers and metadata that the acquisition stage can consume directly
+
+requirements:
+  R1:
+    title: Query Interface
+    items:
+      - R1.1: Search must accept a free-text research question as a string (e.g. "attention mechanisms in transformer architectures")
+      - R1.2: Search must accept structured query parameters including author name, title keywords, abstract keywords, and publication date range
+      - R1.3: When both free-text and structured parameters are provided, Search must combine them (structured parameters refine the free-text query)
+      - R1.4: Search must accept a maximum results parameter with a default of 20
+      - R1.5: Search must return a descriptive error when the query is empty or contains no searchable terms
+
+  R2:
+    title: Source Backends
+    items:
+      - R2.1: Search must query the arXiv API (export.arxiv.org) using the provided search terms
+      - R2.2: Search must query the Semantic Scholar Academic Graph API using the provided search terms
+      - R2.3: Each backend must be independently enabled or disabled via configuration
+      - R2.4: Search must return a descriptive error when all configured backends are disabled
+      - R2.5: When one backend fails (network error, API error, timeout), Search must log the error and continue with results from remaining backends
+      - R2.6: Search must support adding new backends without modifying existing backend code (backend interface pattern)
+
+  R3:
+    title: Result Ranking and Deduplication
+    items:
+      - R3.1: Search must deduplicate results across backends by matching on DOI, arXiv ID, or title similarity (normalized, case-insensitive, ignoring punctuation)
+      - R3.2: When duplicates are found, Search must merge metadata from both sources, preferring the source with more complete fields
+      - R3.3: Search must rank results by relevance to the query terms
+      - R3.4: Search must support a recency bias option that boosts papers published within a configurable time window (default 2 years)
+      - R3.5: Each result must include a relevance score between 0.0 and 1.0
+
+  R4:
+    title: Output Format
+    items:
+      - R4.1: Search must return a list of SearchResult records, each containing at minimum an identifier (arXiv ID, DOI, or URL), title, authors, abstract, publication date, source (which backend found it), and relevance score
+      - R4.2: Search must print results to stdout in a human-readable table (rank, title truncated to 60 characters, authors, year, source)
+      - R4.3: Search must support a --json flag that outputs the full SearchResult list as JSON for programmatic consumption
+      - R4.4: Each SearchResult must include a preferred acquisition identifier (arXiv ID if available, then DOI, then URL) so the acquisition stage can consume results without transformation
+      - R4.5: Search must print the total number of results and the number of deduplicated items removed
+
+  R5:
+    title: Rate Limiting and Access
+    items:
+      - R5.1: Search must include a configurable delay between API calls to different backends (default 1 second)
+      - R5.2: Search must respect the arXiv API rate limit of one request per 3 seconds
+      - R5.3: Search must respect the Semantic Scholar API rate limit (100 requests per 5 minutes for unauthenticated access)
+      - R5.4: Search must set a User-Agent header identifying the tool (e.g. "research-engine/0.1") on all API requests
+      - R5.5: Search must support a Semantic Scholar API key via configuration for higher rate limits
+      - R5.6: Search must use a configurable timeout for each API request (default 30 seconds)
+
+non_goals:
+  - We do not crawl, mirror, or index the academic literature; we query existing APIs on demand
+  - We do not build a local search index or paper database across sessions
+  - We do not traverse citation graphs (cited-by, references) as part of search
+  - We do not perform full-text search within paper contents; we search metadata and abstracts only
+  - We do not handle authentication for paywalled publishers; we search open APIs
+  - We do not cache search results between invocations
+
+acceptance_criteria:
+  - Search returns results for a free-text query against arXiv
+  - Search returns results for a free-text query against Semantic Scholar
+  - Search returns combined, deduplicated results when both backends are enabled
+  - Search accepts structured query parameters (author, keywords, date range) and narrows results accordingly
+  - Search fails with a descriptive error when the query is empty
+  - Search continues and returns partial results when one backend fails
+  - Results include identifiers that the acquisition stage can consume directly
+  - JSON output flag produces valid JSON with all SearchResult fields
+  - Rate limiting delays are applied between API calls
