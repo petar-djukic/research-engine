@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -28,6 +29,28 @@ func Init() error {
 		fmt.Println("  ", dir)
 	}
 	fmt.Println("Project directories initialized.")
+	return nil
+}
+
+const (
+	binDir  = "bin"
+	binName = "research-engine"
+	cmdPkg  = "./cmd/research-engine"
+)
+
+// Build compiles the CLI binary into bin/.
+func Build() error {
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		return fmt.Errorf("creating %s: %w", binDir, err)
+	}
+	out := filepath.Join(binDir, binName)
+	cmd := exec.Command("go", "build", "-o", out, cmdPkg)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("go build: %w", err)
+	}
+	fmt.Printf("Built %s\n", out)
 	return nil
 }
 

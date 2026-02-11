@@ -6,5 +6,5 @@ scripts/
 
 .DS_Store
 
-# Compiled binary
-research-engine
+# Build output
+bin/
