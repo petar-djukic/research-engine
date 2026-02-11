@@ -1,22 +1,28 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/pdiddy/research-engine/internal/search"
+	"github.com/pdiddy/research-engine/pkg/types"
 )
 
+const defaultSearchTimeout = 30 * time.Second
+
 var searchCmd = &cobra.Command{
-	Use:   "search",
+	Use:   "search [query]",
 	Short: "Search academic APIs for candidate papers",
 	Long: `Search queries academic APIs (arXiv, Semantic Scholar) for papers matching
 a research question or structured query parameters. Results are deduplicated
 across sources and ranked by relevance.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintln(os.Stderr, "search: not yet implemented")
-		return fmt.Errorf("not yet implemented")
-	},
+	RunE: runSearch,
 }
 
 func init() {
@@ -30,4 +36,83 @@ func init() {
 	searchCmd.Flags().Bool("recency-bias", false, "boost recently published papers")
 
 	rootCmd.AddCommand(searchCmd)
+}
+
+func runSearch(cmd *cobra.Command, args []string) error {
+	queryText, _ := cmd.Flags().GetString("query")
+	author, _ := cmd.Flags().GetString("author")
+	keywords, _ := cmd.Flags().GetString("keywords")
+	fromStr, _ := cmd.Flags().GetString("from")
+	toStr, _ := cmd.Flags().GetString("to")
+	maxResults, _ := cmd.Flags().GetInt("max-results")
+	jsonOutput, _ := cmd.Flags().GetBool("json")
+	recencyBias, _ := cmd.Flags().GetBool("recency-bias")
+
+	// If no --query flag, use positional args as the query.
+	if queryText == "" && len(args) > 0 {
+		queryText = strings.Join(args, " ")
+	}
+
+	query := search.Query{
+		FreeText: queryText,
+		Author:   author,
+	}
+	if keywords != "" {
+		for _, kw := range strings.Split(keywords, ",") {
+			kw = strings.TrimSpace(kw)
+			if kw != "" {
+				query.Keywords = append(query.Keywords, kw)
+			}
+		}
+	}
+	if fromStr != "" {
+		t, err := time.Parse("2006-01-02", fromStr)
+		if err != nil {
+			return fmt.Errorf("invalid --from date %q: use YYYY-MM-DD", fromStr)
+		}
+		query.DateFrom = t
+	}
+	if toStr != "" {
+		t, err := time.Parse("2006-01-02", toStr)
+		if err != nil {
+			return fmt.Errorf("invalid --to date %q: use YYYY-MM-DD", toStr)
+		}
+		query.DateTo = t
+	}
+
+	cfg := types.SearchConfig{
+		HTTPConfig: types.HTTPConfig{
+			Timeout:   defaultSearchTimeout,
+			UserAgent: defaultUserAgent,
+		},
+		MaxResults:            maxResults,
+		EnableArxiv:           true,
+		EnableSemanticScholar: true,
+		InterBackendDelay:     1 * time.Second,
+		RecencyBiasWindow:     2 * 365 * 24 * time.Hour,
+	}
+
+	client := &http.Client{Timeout: cfg.Timeout}
+
+	var backends []search.Backend
+	if cfg.EnableArxiv {
+		backends = append(backends, &search.ArxivBackend{Client: client})
+	}
+	if cfg.EnableSemanticScholar {
+		backends = append(backends, &search.SemanticScholarBackend{
+			Client: client,
+			APIKey: cfg.SemanticScholarAPIKey,
+		})
+	}
+
+	out, err := search.Search(context.Background(), query, backends, cfg, recencyBias, os.Stderr)
+	if err != nil {
+		return err
+	}
+
+	if jsonOutput {
+		return search.FormatJSON(out, os.Stdout)
+	}
+	search.FormatTable(out, os.Stdout)
+	return nil
 }
