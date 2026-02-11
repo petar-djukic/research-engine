@@ -45,6 +45,10 @@ This is a personal research toolkit that:
 - Support citation tracking from knowledge base to output
 - Allow iterative refinement of generated content
 
+## Build Tooling
+
+- `mage` is installed globally. Call it directly (e.g. `mage stats`) — do not prepend PATH exports.
+
 ## When Working on This Repository
 
 Focus on practical utility over theoretical perfection. This is a working system for real research workflows, not a demonstration project. Optimize for daily use and easy maintenance.

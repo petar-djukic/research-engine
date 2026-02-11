@@ -1,16 +1,14 @@
 id: prd006-search
 title: Paper Search
 problem: |
-  The research pipeline begins with search, but no PRD defines how a
-  researcher queries academic sources from within the tool. Today the
-  researcher must leave the pipeline, open a browser, navigate to arXiv
-  or Semantic Scholar, craft a query, scan results, copy identifiers, and
-  paste them back into the acquisition stage. Each transition loses context:
-  the query that motivated the search, the ranking the researcher applied
-  mentally, and the papers that were rejected. When exploring a new topic
-  the researcher may repeat this loop dozens of times across multiple
-  sources, manually deduplicating results that appear in more than one
-  database.
+  Researchers query academic sources outside the pipeline: open a browser,
+  navigate to arXiv or Semantic Scholar, craft a query, scan results, copy
+  identifiers, and paste them back into the acquisition stage. Each
+  transition loses context: the query that motivated the search, the
+  ranking the researcher applied mentally, and the papers that were
+  rejected. When exploring a new topic the researcher may repeat this loop
+  dozens of times across multiple sources, manually deduplicating results
+  that appear in more than one database.
 
   We need a search stage that accepts a research question or structured
   query, fans it out to multiple academic APIs, deduplicates and ranks
@@ -91,3 +89,14 @@ acceptance_criteria:
   - Results include identifiers that the acquisition stage can consume directly
   - JSON output flag produces valid JSON with all SearchResult fields
   - Rate limiting delays are applied between API calls
+
+open_questions:
+  - Q1: Should search use Claude to convert free-text queries into structured queries (author, date range, journal) before sending to backends?
+  - Q2: Should search persist queries and results to a query file (e.g. query.yaml) that the user can re-load or edit, with a --query-file flag to override the default?
+  - Q3: Should search results use CSL (Citation Style Language) YAML format for interoperability with reference managers?
+  - Q4: Should each result include a file:// URL to the local PDF path when the paper has already been acquired?
+  - Q5: Should Google Scholar be added as a backend (in addition to arXiv and Semantic Scholar)?
+  - Q6: Should merged results list all databases where the paper was found (not just the primary source)?
+
+references:
+  - prd001-acquisition

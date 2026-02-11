@@ -3,6 +3,7 @@ module github.com/pdiddy/research-engine
 go 1.25.6
 
 require (
+	github.com/magefile/mage v1.15.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	go.yaml.in/yaml/v3 v3.0.4
