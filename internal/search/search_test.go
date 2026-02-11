@@ -563,6 +563,226 @@ func TestIsArxivID(t *testing.T) {
 	}
 }
 
+// --- CSL output ---
+
+func TestFormatCSL(t *testing.T) {
+	out := SearchOutput{
+		Results: []types.SearchResult{
+			{
+				Identifier: "1706.03762",
+				Title:      "Attention Is All You Need",
+				Authors:    []string{"Ashish Vaswani", "Noam Shazeer"},
+				Abstract:   "We propose a new architecture.",
+				Date:       time.Date(2017, 6, 12, 0, 0, 0, 0, time.UTC),
+				Source:     "arxiv",
+			},
+			{
+				Identifier: "10.1234/example",
+				Title:      "A DOI Paper",
+				Authors:    []string{"Jane Smith"},
+				Date:       time.Date(2023, 3, 15, 0, 0, 0, 0, time.UTC),
+				Source:     "semantic_scholar",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := FormatCSL(out, &buf); err != nil {
+		t.Fatalf("FormatCSL: %v", err)
+	}
+
+	s := buf.String()
+	if !strings.Contains(s, "family: Vaswani") {
+		t.Error("CSL output should contain parsed family name 'Vaswani'")
+	}
+	if !strings.Contains(s, "given: Ashish") {
+		t.Error("CSL output should contain parsed given name 'Ashish'")
+	}
+	if !strings.Contains(s, "type: article") {
+		t.Error("CSL output should contain type: article")
+	}
+	if !strings.Contains(s, "DOI: \"10.1234/example\"") && !strings.Contains(s, "DOI: 10.1234/example") {
+		t.Error("CSL output should contain DOI for DOI-identified papers")
+	}
+	if !strings.Contains(s, "date-parts") {
+		t.Error("CSL output should contain date-parts")
+	}
+}
+
+func TestFormatCSLEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	if err := FormatCSL(SearchOutput{}, &buf); err != nil {
+		t.Fatalf("FormatCSL: %v", err)
+	}
+	s := buf.String()
+	if !strings.Contains(s, "[]") {
+		t.Errorf("empty CSL output should be empty list, got: %s", s)
+	}
+}
+
+func TestParseAuthorName(t *testing.T) {
+	tests := []struct {
+		input      string
+		wantFamily string
+		wantGiven  string
+		wantLit    string
+	}{
+		{"Ashish Vaswani", "Vaswani", "Ashish", ""},
+		{"Jean-Pierre Dupont", "Dupont", "Jean-Pierre", ""},
+		{"OpenAI", "", "", "OpenAI"},
+		{"", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			n := parseAuthorName(tt.input)
+			if n.Family != tt.wantFamily {
+				t.Errorf("Family = %q, want %q", n.Family, tt.wantFamily)
+			}
+			if n.Given != tt.wantGiven {
+				t.Errorf("Given = %q, want %q", n.Given, tt.wantGiven)
+			}
+			if n.Literal != tt.wantLit {
+				t.Errorf("Literal = %q, want %q", n.Literal, tt.wantLit)
+			}
+		})
+	}
+}
+
+func TestToCSLItem(t *testing.T) {
+	r := types.SearchResult{
+		Identifier: "10.1234/test",
+		Title:      "Test Paper",
+		Authors:    []string{"John Smith"},
+		Abstract:   "An abstract.",
+		Date:       time.Date(2023, 6, 15, 0, 0, 0, 0, time.UTC),
+	}
+
+	item := toCSLItem(r)
+	if item.Type != "article" {
+		t.Errorf("Type = %q, want article", item.Type)
+	}
+	if item.DOI != "10.1234/test" {
+		t.Errorf("DOI = %q, want the identifier", item.DOI)
+	}
+	if item.Issued == nil || len(item.Issued.DateParts) != 1 {
+		t.Fatal("Issued date-parts should have one entry")
+	}
+	if item.Issued.DateParts[0][0] != 2023 || item.Issued.DateParts[0][1] != 6 || item.Issued.DateParts[0][2] != 15 {
+		t.Errorf("date-parts = %v, want [2023 6 15]", item.Issued.DateParts[0])
+	}
+
+	// arXiv ID should not set DOI.
+	r2 := types.SearchResult{Identifier: "2301.07041", Title: "ArXiv Paper"}
+	item2 := toCSLItem(r2)
+	if item2.DOI != "" {
+		t.Errorf("arXiv ID should not set DOI, got %q", item2.DOI)
+	}
+}
+
+// --- Query file persistence ---
+
+func TestQueryFileRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/query.yaml"
+
+	query := Query{
+		FreeText: "attention mechanisms",
+		Author:   "Vaswani",
+		Keywords: []string{"transformers"},
+		DateFrom: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	cfg := types.SearchConfig{MaxResults: 10}
+	out := SearchOutput{
+		Results: []types.SearchResult{
+			{Identifier: "1706.03762", Title: "Attention Is All You Need", Authors: []string{"Vaswani"}, RelevanceScore: 0.9},
+			{Identifier: "2301.99999", Title: "Another Paper", RelevanceScore: 0.7},
+		},
+		DupsRemoved:   1,
+		BackendErrors: []string{"s2: timeout"},
+	}
+
+	if err := WriteQueryFile(path, query, cfg, true, out); err != nil {
+		t.Fatalf("WriteQueryFile: %v", err)
+	}
+
+	loaded, err := ReadQueryFile(path)
+	if err != nil {
+		t.Fatalf("ReadQueryFile: %v", err)
+	}
+
+	if loaded.Query.FreeText != "attention mechanisms" {
+		t.Errorf("FreeText = %q", loaded.Query.FreeText)
+	}
+	if loaded.Query.Author != "Vaswani" {
+		t.Errorf("Author = %q", loaded.Query.Author)
+	}
+	if len(loaded.Query.Keywords) != 1 || loaded.Query.Keywords[0] != "transformers" {
+		t.Errorf("Keywords = %v", loaded.Query.Keywords)
+	}
+	if loaded.Query.DateFrom != "2020-01-01" {
+		t.Errorf("DateFrom = %q", loaded.Query.DateFrom)
+	}
+	if loaded.Config.MaxResults != 10 {
+		t.Errorf("MaxResults = %d", loaded.Config.MaxResults)
+	}
+	if !loaded.Config.RecencyBias {
+		t.Error("RecencyBias should be true")
+	}
+	if len(loaded.Results) != 2 {
+		t.Errorf("len(Results) = %d, want 2", len(loaded.Results))
+	}
+	if loaded.Results[0].Identifier != "1706.03762" {
+		t.Errorf("Results[0].Identifier = %q", loaded.Results[0].Identifier)
+	}
+	if loaded.Summary.DuplicatesRemoved != 1 {
+		t.Errorf("DuplicatesRemoved = %d", loaded.Summary.DuplicatesRemoved)
+	}
+	if len(loaded.Summary.BackendErrors) != 1 {
+		t.Errorf("BackendErrors = %v", loaded.Summary.BackendErrors)
+	}
+	if loaded.Summary.Timestamp.IsZero() {
+		t.Error("Timestamp should not be zero")
+	}
+}
+
+func TestQueryFileReadNotFound(t *testing.T) {
+	_, err := ReadQueryFile("/nonexistent/query.yaml")
+	if err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+}
+
+func TestQueryParamsToQuery(t *testing.T) {
+	p := QueryParams{
+		FreeText: "attention",
+		Author:   "Smith",
+		Keywords: []string{"ml"},
+		DateFrom: "2020-01-15",
+		DateTo:   "2023-12-31",
+	}
+	q, err := p.ToQuery()
+	if err != nil {
+		t.Fatalf("ToQuery: %v", err)
+	}
+	if q.FreeText != "attention" {
+		t.Errorf("FreeText = %q", q.FreeText)
+	}
+	if q.DateFrom.Year() != 2020 || q.DateFrom.Month() != 1 || q.DateFrom.Day() != 15 {
+		t.Errorf("DateFrom = %v", q.DateFrom)
+	}
+	if q.DateTo.Year() != 2023 || q.DateTo.Month() != 12 || q.DateTo.Day() != 31 {
+		t.Errorf("DateTo = %v", q.DateTo)
+	}
+}
+
+func TestQueryParamsToQueryInvalidDate(t *testing.T) {
+	p := QueryParams{DateFrom: "not-a-date"}
+	_, err := p.ToQuery()
+	if err == nil {
+		t.Error("expected error for invalid date")
+	}
+}
+
 func TestMergeInto(t *testing.T) {
 	dst := types.SearchResult{
 		Identifier:             "2301.07041",

@@ -21,7 +21,12 @@ var searchCmd = &cobra.Command{
 	Short: "Search academic APIs for candidate papers",
 	Long: `Search queries academic APIs (arXiv, Semantic Scholar) for papers matching
 a research question or structured query parameters. Results are deduplicated
-across sources and ranked by relevance.`,
+across sources and ranked by relevance.
+
+Use --query-file to save results to a YAML file for later review. When
+--query-file is provided without a query, the saved results are displayed.
+
+Use --csl to output results in CSL YAML format for Pandoc and reference managers.`,
 	RunE: runSearch,
 }
 
@@ -33,7 +38,9 @@ func init() {
 	searchCmd.Flags().String("to", "", "publication date range end (YYYY-MM-DD)")
 	searchCmd.Flags().Int("max-results", 20, "maximum number of results to return")
 	searchCmd.Flags().Bool("json", false, "output results as JSON")
+	searchCmd.Flags().Bool("csl", false, "output results as CSL YAML for reference managers")
 	searchCmd.Flags().Bool("recency-bias", false, "boost recently published papers")
+	searchCmd.Flags().String("query-file", "", "YAML file to save/load query and results")
 
 	rootCmd.AddCommand(searchCmd)
 }
@@ -46,11 +53,20 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	toStr, _ := cmd.Flags().GetString("to")
 	maxResults, _ := cmd.Flags().GetInt("max-results")
 	jsonOutput, _ := cmd.Flags().GetBool("json")
+	cslOutput, _ := cmd.Flags().GetBool("csl")
 	recencyBias, _ := cmd.Flags().GetBool("recency-bias")
+	queryFile, _ := cmd.Flags().GetString("query-file")
 
 	// If no --query flag, use positional args as the query.
 	if queryText == "" && len(args) > 0 {
 		queryText = strings.Join(args, " ")
+	}
+
+	hasQuery := queryText != "" || author != "" || keywords != "" || fromStr != "" || toStr != ""
+
+	// Load from query file when no query is provided (R4.6).
+	if queryFile != "" && !hasQuery {
+		return loadAndDisplayQueryFile(queryFile, jsonOutput, cslOutput)
 	}
 
 	query := search.Query{
@@ -110,6 +126,36 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Save to query file when --query-file is provided with a query (R4.6).
+	if queryFile != "" {
+		if err := search.WriteQueryFile(queryFile, query, cfg, recencyBias, out); err != nil {
+			return fmt.Errorf("saving query file: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Saved query and %d results to %s\n", len(out.Results), queryFile)
+	}
+
+	return formatSearchOutput(out, jsonOutput, cslOutput)
+}
+
+func loadAndDisplayQueryFile(path string, jsonOutput, cslOutput bool) error {
+	qf, err := search.ReadQueryFile(path)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "Loaded %d results from %s (saved %s)\n",
+		qf.Summary.Total, path, qf.Summary.Timestamp.Format("2006-01-02 15:04"))
+
+	out := search.SearchOutput{
+		Results:     qf.Results,
+		DupsRemoved: qf.Summary.DuplicatesRemoved,
+	}
+	return formatSearchOutput(out, jsonOutput, cslOutput)
+}
+
+func formatSearchOutput(out search.SearchOutput, jsonOutput, cslOutput bool) error {
+	if cslOutput {
+		return search.FormatCSL(out, os.Stdout)
+	}
 	if jsonOutput {
 		return search.FormatJSON(out, os.Stdout)
 	}

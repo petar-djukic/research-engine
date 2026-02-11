@@ -32,6 +32,7 @@ requirements:
       - R1.3: When both free-text and structured parameters are provided, Search must combine them (structured parameters refine the free-text query)
       - R1.4: Search must accept a maximum results parameter with a default of 20
       - R1.5: Search must return a descriptive error when the query is empty or contains no searchable terms
+      - R1.6: Search must accept a --query-file flag that specifies a YAML file path for persisting queries and results
 
   R2:
     title: Source Backends
@@ -60,6 +61,8 @@ requirements:
       - R4.3: Search must support a --json flag that outputs the full SearchResult list as JSON for programmatic consumption
       - R4.4: Each SearchResult must include a preferred acquisition identifier (arXiv ID if available, then DOI, then URL) so the acquisition stage can consume results without transformation
       - R4.5: Search must print the total number of results and the number of deduplicated items removed
+      - R4.6: Search must support a --query-file flag that saves the query parameters, configuration, and results to a YAML file; when the file exists and no query is provided, Search must load and display the saved results without re-querying APIs
+      - R4.7: Search must support a --csl flag that outputs results in CSL (Citation Style Language) YAML format with fields id, type, title, author (family/given), abstract, issued (date-parts), and DOI where available
 
   R5:
     title: Rate Limiting and Access
@@ -77,8 +80,6 @@ non_goals:
   - We do not traverse citation graphs (cited-by, references) as part of search
   - We do not perform full-text search within paper contents; we search metadata and abstracts only
   - We do not handle authentication for paywalled publishers; we search open APIs
-  - We do not cache search results between invocations
-
 acceptance_criteria:
   - Search returns results for a free-text query against arXiv
   - Search returns results for a free-text query against Semantic Scholar
@@ -89,14 +90,8 @@ acceptance_criteria:
   - Results include identifiers that the acquisition stage can consume directly
   - JSON output flag produces valid JSON with all SearchResult fields
   - Rate limiting delays are applied between API calls
-
-open_questions:
-  - Q1: Should search use Claude to convert free-text queries into structured queries (author, date range, journal) before sending to backends?
-  - Q2: Should search persist queries and results to a query file (e.g. query.yaml) that the user can re-load or edit, with a --query-file flag to override the default?
-  - Q3: Should search results use CSL (Citation Style Language) YAML format for interoperability with reference managers?
-  - Q4: Should each result include a file:// URL to the local PDF path when the paper has already been acquired?
-  - Q5: Should Google Scholar be added as a backend (in addition to arXiv and Semantic Scholar)?
-  - Q6: Should merged results list all databases where the paper was found (not just the primary source)?
+  - Query file saves query and results; loading a query file displays results without re-querying
+  - CSL output flag produces valid CSL YAML with author, title, date, and identifier fields
 
 references:
   - prd001-acquisition
