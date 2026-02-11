@@ -1,20 +1,18 @@
 # Research Engine
 
-A personal research pipeline that takes academic papers from search through knowledge extraction to new paper generation. The system is a Go command-line tool backed by Mage build targets, designed to run locally on a single machine. The pipeline begins with search: the researcher describes a topic, and the system finds relevant papers across arXiv, Semantic Scholar, and other sources. Search results feed into acquisition, which downloads PDFs. From there, each stage transforms data into a more useful form: raw PDFs become structured text, structured text becomes extracted knowledge, and extracted knowledge feeds into new writing.
+A personal research pipeline that takes academic papers from search through knowledge extraction to new paper generation. The system is a Go CLI that exposes each pipeline stage as a Cobra subcommand, designed to run locally on a single machine. The pipeline begins with search: the researcher describes a topic, and the system finds relevant papers across arXiv, Semantic Scholar, and other sources. Search results feed into acquisition, which downloads PDFs. From there, each stage transforms data into a more useful form: raw PDFs become structured text, structured text becomes extracted knowledge, and extracted knowledge feeds into new writing.
 
 See [VISION.md](docs/VISION.md) for project goals and boundaries. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design and data flow.
 
 ## Prerequisites
 
-This guide assumes macOS with [Homebrew](https://brew.sh) installed. If you do not have Homebrew, install it first:
+- **Go 1.25+** — implementation language and build tool
+- **Container runtime** (Docker or Podman) — required for PDF conversion (markitdown backend)
+- **Claude API key** — required for extraction and generation stages (set `ANTHROPIC_API_KEY` environment variable)
 
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
+### Install Go
 
-### Go
-
-Go is the implementation language for the pipeline and CLI.
+This guide assumes macOS with [Homebrew](https://brew.sh) installed.
 
 ```bash
 brew install go
@@ -24,15 +22,7 @@ Verify:
 
 ```bash
 go version
-# go version go1.24.x darwin/arm64
-```
-
-### Mage
-
-Mage is a Go-native build tool that orchestrates the pipeline stages.
-
-```bash
-go install github.com/magefile/mage@latest
+# go version go1.25.x darwin/arm64
 ```
 
 Make sure `$GOPATH/bin` (typically `~/go/bin`) is on your PATH. Add this to your shell profile (`~/.zshrc` or `~/.bashrc`) if it is not already there:
@@ -41,93 +31,126 @@ Make sure `$GOPATH/bin` (typically `~/go/bin`) is on your PATH. Add this to your
 export PATH="$PATH:$(go env GOPATH)/bin"
 ```
 
-Verify:
+### Container Runtime
+
+The conversion stage uses a container to run MarkItDown for PDF-to-Markdown conversion. Install Docker or Podman:
 
 ```bash
-mage -version
+brew install --cask docker   # Docker Desktop
+# or
+brew install podman           # Podman
 ```
 
-### SQLite
+The CLI auto-detects which runtime is available.
 
-SQLite powers the knowledge base index. macOS includes SQLite by default, but you can install a newer version:
+## Build
 
 ```bash
-brew install sqlite
+go build -o research-engine ./cmd/research-engine/
 ```
 
-Verify:
+Or install directly:
 
 ```bash
-sqlite3 --version
-```
-
-### PDF Conversion Tools
-
-The conversion stage requires an external tool to extract text from PDFs. Install at least one:
-
-**Option A: Poppler (pdftotext)** — lightweight, handles most papers well:
-
-```bash
-brew install poppler
+go install ./cmd/research-engine/
 ```
 
 Verify:
 
 ```bash
-pdftotext -v
+./research-engine version
 ```
 
-**Option B: GROBID** — machine-learning-based, better at identifying document structure (sections, references). Requires Docker:
+## Pipeline Stages
+
+The pipeline has six stages, each exposed as a Cobra subcommand. The first three are implemented; the rest are planned.
+
+| Stage | Command | Status | PRD |
+|-------|---------|--------|-----|
+| Search | `research-engine search` | Implemented | [prd006-search](docs/specs/product-requirements/prd006-search.yaml) |
+| Acquisition | `research-engine acquire` | Implemented | [prd001-acquisition](docs/specs/product-requirements/prd001-acquisition.yaml) |
+| Conversion | `research-engine convert` | Implemented | [prd002-conversion](docs/specs/product-requirements/prd002-conversion.yaml) |
+| Extraction | `research-engine extract` | Planned | [prd003-extraction](docs/specs/product-requirements/prd003-extraction.yaml) |
+| Knowledge Base | `research-engine store` | Planned | [prd004-knowledge-base](docs/specs/product-requirements/prd004-knowledge-base.yaml) |
+| Generation | `research-engine generate` | Planned | [prd005-generation](docs/specs/product-requirements/prd005-generation.yaml) |
+
+### Search
+
+Search queries arXiv and Semantic Scholar for papers matching a research question.
 
 ```bash
-brew install docker
-docker pull lfoppiano/grobid:0.8.1
-docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.1
+research-engine search "transformer attention mechanisms"
+research-engine search --query "neural networks" --author "Hinton" --max-results 10
+research-engine search --keywords "LLM,reasoning" --from 2025-01-01 --json
+research-engine search --query "diffusion models" --query-file results.yaml
+research-engine search --query-file results.yaml   # reload saved results
+research-engine search --query "attention" --csl    # CSL YAML output
 ```
 
-Verify by visiting `http://localhost:8070` in a browser.
+Flags:
 
-### Claude API Key (for Extraction and Generation)
+| Flag | Description |
+|------|-------------|
+| `--query` | Free-text research question |
+| `--author` | Filter by author name |
+| `--keywords` | Filter by keywords (comma-separated) |
+| `--from` | Publication date range start (YYYY-MM-DD) |
+| `--to` | Publication date range end (YYYY-MM-DD) |
+| `--max-results` | Maximum number of results (default 20) |
+| `--json` | Output results as JSON |
+| `--csl` | Output results as CSL YAML for reference managers |
+| `--recency-bias` | Boost recently published papers |
+| `--query-file` | YAML file to save/load query and results |
 
-The extraction and generation stages call the Claude API. Set your API key as an environment variable:
+### Acquire
+
+Acquire downloads papers from arXiv IDs, DOIs, or direct PDF URLs.
 
 ```bash
-export ANTHROPIC_API_KEY="your-key-here"
+research-engine acquire 2301.07041
+research-engine acquire "10.1038/s41586-021-03819-2"
+research-engine acquire https://example.com/paper.pdf
+research-engine acquire 2301.07041 2305.14314 --timeout 2m --delay 2s
 ```
 
-Add this to your shell profile to persist it across sessions.
+Flags:
+
+| Flag | Description |
+|------|-------------|
+| `--timeout` | HTTP request timeout (default 60s) |
+| `--delay` | Delay between consecutive downloads (default 1s) |
+| `--papers-dir` | Base directory for papers (default "papers") |
+
+### Convert
+
+Convert transforms downloaded PDFs into structured Markdown.
+
+```bash
+research-engine convert papers/raw/2301.07041.pdf
+research-engine convert --batch                        # convert all unconverted PDFs
+research-engine convert --backend markitdown paper.pdf # explicit backend
+```
+
+Flags:
+
+| Flag | Description |
+|------|-------------|
+| `--backend` | Conversion backend (default "markitdown") |
+| `--papers-dir` | Base directory for papers (default "papers") |
+| `--batch` | Process all unconverted papers in papers-dir |
 
 ## Project Structure
 
 ```text
 research-engine/
-  cmd/research-engine/    CLI entry point
+  cmd/research-engine/    CLI entry point and Cobra subcommands
   internal/               Private implementation (one package per pipeline stage)
-  pkg/types/              Shared data structures (Paper, KnowledgeItem, Draft)
-  magefiles/              Mage build targets (one file per stage)
+  pkg/types/              Shared data structures (Paper, SearchResult, KnowledgeItem)
+  magefiles/              Build automation and developer tooling
   docs/                   VISION, ARCHITECTURE, PRDs, use cases
   papers/                 Working directory for acquired papers (per-project)
   knowledge/              Working directory for knowledge base (per-project)
   output/                 Working directory for generated drafts (per-project)
-```
-
-## Pipeline Stages
-
-The pipeline has six stages, each exposed as a Mage target:
-
-| Stage          | Mage Target      | Description                                       | PRD                                                                                 |
-| -------------- | ---------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Search         | `mage search`    | Find relevant papers across academic sources      | [prd006-search](docs/specs/product-requirements/prd006-search.yaml)                 |
-| Acquisition    | `mage download`  | Download papers from arXiv, DOI, or URL           | [prd001-acquisition](docs/specs/product-requirements/prd001-acquisition.yaml)       |
-| Conversion     | `mage convert`   | Transform PDFs into structured Markdown           | [prd002-conversion](docs/specs/product-requirements/prd002-conversion.yaml)         |
-| Extraction     | `mage extract`   | Pull claims, methods, and definitions from text   | [prd003-extraction](docs/specs/product-requirements/prd003-extraction.yaml)         |
-| Knowledge Base | `mage index`     | Store and index extracted knowledge for retrieval | [prd004-knowledge-base](docs/specs/product-requirements/prd004-knowledge-base.yaml) |
-| Generation     | `mage draft`     | Produce cited drafts from the knowledge base      | [prd005-generation](docs/specs/product-requirements/prd005-generation.yaml)         |
-
-Run the full pipeline end-to-end:
-
-```bash
-mage pipeline
 ```
 
 ## Development
@@ -138,8 +161,9 @@ Run tests:
 go test ./...
 ```
 
-List available Mage targets:
+Build automation (requires [Mage](https://magefile.org)):
 
 ```bash
-mage -l
+go run github.com/magefile/mage@latest -l   # list available targets
+go run github.com/magefile/mage@latest stats # project statistics
 ```

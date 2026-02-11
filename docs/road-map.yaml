@@ -1,20 +1,20 @@
 releases:
   - version: "01.0"
     name: Core Pipeline
-    status: not_started
+    status: done
     focus: |
       Search, acquisition, and PDF conversion stages. A researcher queries
       academic APIs, downloads papers, and converts PDFs to structured Markdown.
     use_cases:
       - id: rel01.0-uc001-pdf-conversion
         summary: Convert a PDF paper to structured Markdown with section hierarchy and page markers
-        status: not_started
+        status: done
       - id: rel01.0-uc002-paper-acquisition
         summary: Acquire a paper by arXiv ID, DOI, or URL and store the PDF with metadata
-        status: not_started
+        status: done
       - id: rel01.0-uc003-paper-search
         summary: Search academic APIs for papers matching a research query and return ranked results
-        status: not_started
+        status: done
 
   - version: "02.0"
     name: Knowledge

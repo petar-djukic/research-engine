@@ -234,14 +234,21 @@ Table 4 Package Roles
 
 ## Implementation Status
 
-We are completing the Foundation phase. VISION.md is complete, ARCHITECTURE.md is updated for the six-stage pipeline, and PRDs exist for all six stages. Cobra CLI scaffolding is in place. No stage implementation code has been written yet.
+We have completed the Foundation and Core Pipeline phases. VISION.md, ARCHITECTURE.md, and PRDs for all six stages are in place. Cobra CLI scaffolding is complete with subcommands wired for all stages. The first three pipeline stages (Search, Acquisition, and Conversion) are implemented and tested.
+
+Implemented packages:
+
+- `internal/search/` — arXiv and Semantic Scholar backends, deduplication, CSL YAML output, query file persistence
+- `internal/acquire/` — identifier resolution (arXiv, DOI, direct URL), PDF download with retry and rate limiting
+- `internal/convert/` — PDF-to-Markdown conversion via MarkItDown in a container runtime
+- `internal/container/` — container runtime abstraction (Docker and Podman support)
 
 Table 5 Implementation Phases
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| Foundation | Nearing completion | VISION complete; ARCHITECTURE updated; PRDs for all six stages complete; Cobra CLI scaffolding in place |
-| Core Pipeline | Not started | Search, Acquisition, and Conversion stages |
+| Foundation | Done | VISION, ARCHITECTURE, PRDs for all six stages, Cobra CLI scaffolding |
+| Core Pipeline | Done | Search, Acquisition, and Conversion stages implemented (internal/search, internal/acquire, internal/convert, internal/container) |
 | Knowledge | Not started | Extraction and Knowledge Base |
 | Generation | Not started | Draft generation with citations |
 
