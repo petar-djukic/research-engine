@@ -2,9 +2,11 @@
 
 # Research Engine
 
-A Claude-powered research tool for academic papers. Claude drives the research workflow through skills: searching for papers, reading them, querying a knowledge base, and writing new work with citations. A Go CLI provides the infrastructure: downloading PDFs, converting them to Markdown so Claude can read them, extracting typed knowledge items, and indexing them for retrieval.
+A Claude-powered research tool for academic papers. This tool is designed to be used with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Anthropic's CLI for Claude. Claude drives the research workflow through skills: searching for papers, reading them, querying a knowledge base, and writing new work with citations. A Go CLI provides the infrastructure: downloading PDFs, converting them to Markdown so Claude can read them, extracting typed knowledge items, and indexing them for retrieval.
 
-See [VISION.md](docs/VISION.md) for project goals and boundaries. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design and data flow.
+The researcher works inside Claude Code, using slash commands like `/search-papers` and `/read-papers` to interact with the system. Claude reads papers, builds understanding, and writes cited prose. The Go CLI runs behind the scenes, invoked by Claude as needed.
+
+See [VISION.md](docs/VISION.md) for project goals and boundaries. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design and data flow. See [eng01-claude-research-skills](docs/engineering/eng01-claude-research-skills.md) for skill design philosophy and conventions.
 
 ## Prerequisites
 
@@ -99,6 +101,44 @@ Or use Mage:
 go run github.com/magefile/mage@latest build
 ```
 
+## Getting Started with Claude Code
+
+This tool requires [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Anthropic's agentic coding tool for the terminal. Claude Code reads the skill definitions in `.claude/commands/` and makes them available as slash commands.
+
+Install Claude Code:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+Start a session from the project root:
+
+```bash
+cd research-engine
+claude
+```
+
+Claude Code loads the project's skills automatically. Type `/` to see all available commands. A typical research session looks like this:
+
+```text
+You:    /search-papers transformer efficiency for long documents
+Claude: [formulates queries, runs search, presents ranked results]
+
+You:    /acquire-papers 2009.14794 2110.08678
+Claude: [downloads PDFs, converts to Markdown, reports results]
+
+You:    /read-papers
+Claude: [lists available papers, reads the one you select, discusses findings]
+
+You:    /query-knowledge what attention mechanisms reduce quadratic complexity?
+Claude: [searches knowledge base, groups results by paper, traces to source]
+
+You:    /write-paper survey on efficient attention mechanisms
+Claude: [creates project, proposes outline, writes sections with citations]
+```
+
+Claude reads the converted Markdown papers directly. The Go CLI handles downloading, conversion, and indexing. Claude handles everything that requires judgment: query formulation, paper comprehension, knowledge synthesis, and writing.
+
 ## Claude Skills
 
 The researcher's primary interface is through Claude Code skills. Each skill is a slash command that Claude executes.
@@ -125,7 +165,7 @@ The Go CLI provides infrastructure that Claude invokes through skills. Each stag
 
 ### Search
 
-Search queries arXiv and Semantic Scholar for papers matching a research question.
+Search queries arXiv, Semantic Scholar, and OpenAlex for papers matching a research question.
 
 ```bash
 research-engine search "transformer attention mechanisms"
