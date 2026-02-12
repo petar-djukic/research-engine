@@ -244,8 +244,12 @@ func FormatTable(out SearchOutput, w io.Writer) {
 		if !r.Date.IsZero() {
 			year = fmt.Sprintf("%d", r.Date.Year())
 		}
+		source := r.Source
+		if isPatentResult(r) {
+			source = "patent"
+		}
 		fmt.Fprintf(w, "%-4d  %-60s  %-20s  %-4s  %-6.2f  %s\n",
-			i+1, title, authors, year, r.RelevanceScore, r.Source)
+			i+1, title, authors, year, r.RelevanceScore, source)
 	}
 
 	fmt.Fprintf(w, "\n%d results", len(out.Results))

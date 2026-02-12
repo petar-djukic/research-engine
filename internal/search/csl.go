@@ -4,6 +4,7 @@ package search
 
 import (
 	"io"
+	"regexp"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -11,18 +12,23 @@ import (
 	"github.com/pdiddy/research-engine/pkg/types"
 )
 
+// patentIDRe matches US patent identifiers (US followed by 6-11 digits, optional kind code).
+var patentIDRe = regexp.MustCompile(`^US\d{6,11}[A-Z]?\d{0,2}$`)
+
 // CSLItem represents a bibliographic entry in CSL (Citation Style Language)
 // format. The field names and structure follow the CSL-JSON/CSL-YAML schema
 // so that output is consumable by Pandoc and reference managers.
 // Implements: prd006-search R4.7.
 type CSLItem struct {
-	ID       string    `yaml:"id"`
-	Type     string    `yaml:"type"`
-	Title    string    `yaml:"title"`
-	Author   []CSLName `yaml:"author,omitempty"`
-	Abstract string    `yaml:"abstract,omitempty"`
-	Issued   *CSLDate  `yaml:"issued,omitempty"`
-	DOI      string    `yaml:"DOI,omitempty"`
+	ID        string    `yaml:"id"`
+	Type      string    `yaml:"type"`
+	Title     string    `yaml:"title"`
+	Author    []CSLName `yaml:"author,omitempty"`
+	Abstract  string    `yaml:"abstract,omitempty"`
+	Issued    *CSLDate  `yaml:"issued,omitempty"`
+	DOI       string    `yaml:"DOI,omitempty"`
+	Number    string    `yaml:"number,omitempty"`
+	Authority string    `yaml:"authority,omitempty"`
 }
 
 // CSLName represents a person's name in CSL format.
@@ -57,6 +63,12 @@ func toCSLItem(r types.SearchResult) CSLItem {
 		Abstract: r.Abstract,
 	}
 
+	if isPatentResult(r) {
+		item.Type = "patent"
+		item.Number = r.Identifier
+		item.Authority = "United States Patent and Trademark Office"
+	}
+
 	for _, a := range r.Authors {
 		item.Author = append(item.Author, parseAuthorName(a))
 	}
@@ -73,6 +85,11 @@ func toCSLItem(r types.SearchResult) CSLItem {
 	}
 
 	return item
+}
+
+// isPatentResult returns true if the result represents a patent.
+func isPatentResult(r types.SearchResult) bool {
+	return r.Source == "patentsview" || patentIDRe.MatchString(r.Identifier)
 }
 
 // parseAuthorName splits a full name string into CSL family/given parts.
