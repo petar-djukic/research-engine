@@ -1,0 +1,115 @@
+# Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
+id: prd008-patent-search
+title: Patent Search and Acquisition
+problem: |
+  The research engine searches academic papers through arXiv, Semantic Scholar,
+  and OpenAlex but has no access to the patent literature. Patents contain
+  methods, claims, and prior art that academic papers reference but do not
+  reproduce. A researcher studying a technical domain misses the patent
+  landscape entirely: who holds rights to a method, what prior art exists,
+  what claims have been granted. Without patent search, the researcher must
+  leave the tool, navigate to Google Patents or the USPTO website, craft a
+  separate query, scan results manually, and download PDFs by hand. The
+  patent identifiers and metadata never enter the pipeline, so extracted
+  knowledge cannot trace back to patent sources.
+
+  We need a patent search backend that queries the USPTO PatentsView API,
+  returns results in the same SearchResult format used by the academic
+  backends, and resolves patent identifiers to downloadable PDFs so the
+  existing acquisition and conversion pipeline can process patents alongside
+  papers.
+
+goals:
+  - G1: Search US patents and published applications through the PatentsView API and return unified SearchResult records
+  - G2: Support free-text search across patent titles, abstracts, and claims
+  - G3: Support structured queries by inventor name, assignee, CPC classification, and date range
+  - G4: Resolve patent numbers to downloadable PDF URLs so the acquisition stage can fetch patent documents
+  - G5: Integrate with the existing search fan-out, deduplication, and ranking pipeline without modifying other backends
+
+requirements:
+  R1:
+    title: PatentsView Search Backend
+    items:
+      - R1.1: Search must implement the existing Backend interface (Name() and Search() methods) as a PatentsViewBackend
+      - R1.2: Search must query the PatentsView API at https://search.patentsview.org/api/v1/patent/ using HTTP GET or POST
+      - R1.3: Search must authenticate requests with an API key sent in the X-Api-Key header
+      - R1.4: The API key must be configurable via PatentsViewAPIKey in SearchConfig and a --patentsview-api-key CLI flag
+      - R1.5: Search must be independently enabled or disabled via an EnablePatentsView field in SearchConfig and participate in the existing backend fan-out (prd006-search R2.3, R2.6)
+      - R1.6: Search must return "patentsview" as the backend Name()
+
+  R2:
+    title: Query Translation
+    items:
+      - R2.1: When the Query contains FreeText, Search must use the _text_any operator against patent_title and patent_abstract fields
+      - R2.2: When the Query contains Author (inventor), Search must add an inventors.inventor_name_last filter using the _contains operator
+      - R2.3: When the Query contains Keywords, Search must combine them into the _text_all operator against patent_title and patent_abstract
+      - R2.4: When the Query contains DateFrom or DateTo, Search must add _gte and _lte filters on patent_date using ISO 8601 format (YYYY-MM-DD)
+      - R2.5: When multiple query fields are present, Search must combine them with the _and operator
+      - R2.6: Search must request the following fields from the API, at minimum, patent_id, patent_title, patent_abstract, patent_date, patent_type, patent_num_claims, and inventors.inventor_name_last
+
+  R3:
+    title: Result Mapping
+    items:
+      - R3.1: Search must map each patent result to a SearchResult with Source set to "patentsview"
+      - R3.2: Search must set the Identifier field to the patent number prefixed with "US" (e.g. "US7654321", "US20230012345")
+      - R3.3: Search must set PreferredAcquisitionID to the same patent identifier so the acquisition stage can resolve it
+      - R3.4: Search must populate Title, Abstract, Authors (from inventors), and Date (from patent_date) in the SearchResult
+      - R3.5: Search must assign a RelevanceScore between 0.0 and 1.0 using position-based scoring consistent with other backends (first result scores highest)
+      - R3.6: Search must respect the MaxResults configuration parameter, requesting no more than MaxResults items per API call (PatentsView maximum is 1000 per page)
+
+  R4:
+    title: Patent Identifier Resolution and PDF Acquisition
+    items:
+      - R4.1: The acquisition stage must recognize US patent identifiers matching the pattern US followed by digits and an optional kind code (e.g. "US7654321", "US7654321B2", "US20230012345A1")
+      - R4.2: For granted patents, Acquire must resolve the patent number to a PDF URL at Google Patents storage (https://patentimages.storage.googleapis.com/pdfs/{patent_id}.pdf)
+      - R4.3: For published applications, Acquire must resolve the publication number to a PDF URL using the same Google Patents storage pattern
+      - R4.4: If the Google Patents PDF URL returns a non-200 status, Acquire must fall back to constructing a Google Patents HTML URL (https://patents.google.com/patent/{patent_id}/en) and report the fallback to stderr
+      - R4.5: Acquire must store patent PDFs in the same papers/raw/ directory used for academic papers, named by the patent identifier slug (e.g. "US7654321.pdf")
+      - R4.6: Acquire must create a metadata YAML file for each patent with source set to "patentsview" and the patent number as the identifier
+
+  R5:
+    title: Rate Limiting and Access
+    items:
+      - R5.1: Search must respect the PatentsView rate limit of 45 requests per minute
+      - R5.2: Search must participate in the existing inter-backend delay (prd006-search R5.1)
+      - R5.3: Search must set the User-Agent header per prd006-search R5.4
+      - R5.4: Search must handle HTTP 429 (rate limit exceeded) responses by reading the Retry-After header and returning a descriptive error
+      - R5.5: Search must use the configurable timeout for API requests per prd006-search R5.6
+
+  R6:
+    title: CLI Integration
+    items:
+      - R6.1: The search command must accept a --patentsview-api-key flag for the API key
+      - R6.2: The search command must accept a --patents flag that enables only the PatentsView backend (convenience flag for patent-only searches)
+      - R6.3: When --patents is not set and EnablePatentsView is true, the PatentsView backend must participate in the normal multi-backend fan-out alongside academic backends
+      - R6.4: Patent results must appear in the same table, JSON, and CSL output formats as academic results
+      - R6.5: The acquire command must recognize patent identifiers without requiring a --type flag; identifier format detection must be automatic
+
+non_goals:
+  - We do not search international patent offices (EPO, WIPO, JPO) in this PRD; we start with USPTO only
+  - We do not parse patent claims structure or classify claims by type; that is an extraction concern
+  - We do not build a patent citation graph or traverse patent families
+  - We do not handle patent images or drawings; we acquire the full PDF and let conversion handle it
+  - We do not provide legal analysis or freedom-to-operate opinions
+  - We do not deduplicate patents against academic papers that describe the same invention
+
+acceptance_criteria:
+  - Search returns patent results for a free-text query against the PatentsView API
+  - Search returns patent results filtered by inventor name
+  - Search returns patent results filtered by date range
+  - Patent results appear alongside academic results in combined search output
+  - Patent results include identifiers that the acquisition stage can consume directly
+  - Acquire downloads a patent PDF given a US patent number
+  - Acquire downloads a published application PDF given a US publication number
+  - Acquire creates a metadata YAML file for each acquired patent
+  - Acquire skips download when the patent PDF already exists on disk
+  - JSON and CSL output formats include patent results with all required fields
+  - Rate limiting delays are applied to PatentsView API calls
+  - Search returns a descriptive error when the API key is missing or invalid
+
+references:
+  - prd006-search
+  - prd001-acquisition
+  - "PatentsView API: https://search.patentsview.org/docs/"
+  - "PatentsView Swagger: https://search.patentsview.org/swagger-ui/"
