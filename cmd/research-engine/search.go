@@ -19,9 +19,9 @@ const defaultSearchTimeout = 30 * time.Second
 var searchCmd = &cobra.Command{
 	Use:   "search [query]",
 	Short: "Search academic APIs for candidate papers",
-	Long: `Search queries academic APIs (arXiv, Semantic Scholar) for papers matching
-a research question or structured query parameters. Results are deduplicated
-across sources and ranked by relevance.
+	Long: `Search queries academic APIs (arXiv, Semantic Scholar, OpenAlex) for papers
+matching a research question or structured query parameters. Results are
+deduplicated across sources and ranked by relevance.
 
 Use --query-file to save results to a YAML file for later review. When
 --query-file is provided without a query, the saved results are displayed.
@@ -104,6 +104,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		MaxResults:            maxResults,
 		EnableArxiv:           true,
 		EnableSemanticScholar: true,
+		EnableOpenAlex:        true,
 		InterBackendDelay:     1 * time.Second,
 		RecencyBiasWindow:     2 * 365 * 24 * time.Hour,
 	}
@@ -118,6 +119,12 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		backends = append(backends, &search.SemanticScholarBackend{
 			Client: client,
 			APIKey: cfg.SemanticScholarAPIKey,
+		})
+	}
+	if cfg.EnableOpenAlex {
+		backends = append(backends, &search.OpenAlexBackend{
+			Client: client,
+			Email:  cfg.OpenAlexEmail,
 		})
 	}
 

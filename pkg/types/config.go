@@ -29,6 +29,12 @@ type SearchConfig struct {
 	// SemanticScholarAPIKey is an optional API key for higher rate limits.
 	SemanticScholarAPIKey string `json:"semantic_scholar_api_key,omitempty" yaml:"semantic_scholar_api_key,omitempty"`
 
+	// EnableOpenAlex controls whether the OpenAlex backend is used.
+	EnableOpenAlex bool `json:"enable_openalex" yaml:"enable_openalex"`
+
+	// OpenAlexEmail is sent as mailto parameter for polite pool access.
+	OpenAlexEmail string `json:"openalex_email,omitempty" yaml:"openalex_email,omitempty"`
+
 	// InterBackendDelay is the delay between API calls to different backends (default 1s).
 	InterBackendDelay time.Duration `json:"inter_backend_delay" yaml:"inter_backend_delay"`
 
