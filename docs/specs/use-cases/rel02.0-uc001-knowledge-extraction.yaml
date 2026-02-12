@@ -1,0 +1,82 @@
+id: rel02.0-uc001-knowledge-extraction
+title: Knowledge Extraction from Structured Markdown
+summary: |
+  A researcher who has converted papers to structured Markdown runs the
+  extract command to produce typed knowledge items. The system reads each
+  Markdown file by section, calls a Generative AI API to classify and extract
+  claims, methods, definitions, and results, validates responses against the
+  KnowledgeItem schema, and writes output YAML files with provenance (paper ID,
+  section, page). Unchanged papers are skipped to avoid redundant API calls.
+
+actor: Researcher who has converted papers to structured Markdown
+trigger: Researcher runs research-engine extract targeting one or more converted papers
+
+flow:
+  - F1: "Enumerate papers: scan papers/markdown/ for Markdown files and load corresponding Paper metadata from papers/metadata/"
+  - F2: "Check freshness: compare each Markdown file's modification time against the existing extraction output in knowledge/extracted/<paper-id>-items.yaml; skip papers whose Markdown has not changed since last extraction"
+  - F3: "Chunk by section: split the Markdown into section-sized chunks using heading boundaries to stay within API context limits"
+  - F4: "Call AI API: send each chunk to the Generative AI API with a prompt requesting typed KnowledgeItems (claim, method, definition, result) with provenance fields"
+  - F5: "Validate response: parse the API response and validate each item against the KnowledgeItem schema; reject malformed items and log a warning"
+  - F6: "Retry on failure: retry failed API calls up to 3 times with exponential backoff; mark the paper as failed after exhausting retries"
+  - F7: "Parse citations: identify inline references (e.g. '[1]', '[Smith et al., 2020]') within each item and parse the bibliography section to produce cited-work records; link inline citations to bibliography entries"
+  - F8: "Assign tags: assign topic tags to each KnowledgeItem based on vocabulary in the paper; assign paper-level tags summarizing overall topics"
+  - F9: "Generate stable IDs: compute a stable item ID for each KnowledgeItem based on paper ID, section, and content hash so items remain consistent across re-extractions of unchanged content"
+  - F10: "Write output: save the list of KnowledgeItems to knowledge/extracted/<paper-id>-items.yaml"
+  - F11: "Report status: print extracting/skipped/failed status for each paper; print batch summary (count of extracted, skipped, failed)"
+  - F12: "Set exit code: return non-zero if any paper in the batch failed"
+
+touchpoints:
+  - T1: "Extraction component: Extract operation (prd003-extraction R5)"
+  - T2: "KnowledgeItem types: claim, method, definition, result (prd003-extraction R1)"
+  - T3: "Provenance fields: paper_id, section, page (prd003-extraction R2)"
+  - T4: "Citation graph: inline citation parsing and bibliography linking (prd003-extraction R3)"
+  - T5: "Automatic tagging: topic tags per item and per paper (prd003-extraction R4)"
+  - T6: "Incremental processing: skip unchanged, re-extract changed (prd003-extraction R6)"
+  - T7: "File system: papers/markdown/ (input), knowledge/extracted/ (output)"
+  - T8: "Generative AI API: Claude or compatible model for classification (prd003-extraction R5.2)"
+
+success_criteria:
+  - S1: Extract produces KnowledgeItems with correct types (claim, method, definition, result) from a converted paper
+  - S2: Every KnowledgeItem includes paper_id, section, and page provenance fields
+  - S3: Extract generates stable item IDs that remain consistent across re-extractions of unchanged content
+  - S4: Extract identifies inline citations and links them to bibliography entries
+  - S5: Extract assigns topic tags to each KnowledgeItem and paper-level tags
+  - S6: Extract skips papers whose Markdown has not changed since last extraction
+  - S7: Extract re-extracts all items when the Markdown has changed, replacing previous output
+  - S8: Extract validates API responses against the KnowledgeItem schema and rejects malformed items
+  - S9: Extract retries failed API calls up to 3 times before marking a paper as failed
+  - S10: Output YAML file contains well-formed KnowledgeItems matching the schema
+  - S11: Batch processing prints per-paper status and a summary of extracted, skipped, and failed counts
+  - S12: Exit code is non-zero if any paper in the batch failed
+
+out_of_scope:
+  - Semantic reasoning or inference beyond classification and extraction
+  - Summarization or paraphrasing of paper content (items preserve original language)
+  - Resolving references to external papers (fetching cited works belongs to acquisition)
+  - Building the retrieval index (that is the Knowledge Base stage, see rel02.0-uc002)
+  - Non-English paper support
+
+test_suite: test-rel02.0-uc001-knowledge-extraction
+
+dependencies:
+  - D1: prd003-extraction (extraction requirements, item types, provenance, citation, tagging)
+  - D2: prd002-conversion (structured Markdown with section headings and page markers)
+  - D3: rel01.0-uc001-pdf-conversion (Markdown files must exist from conversion stage)
+
+risks:
+  - K1: "Generative AI returns inconsistent item boundaries across calls | Validate schema strictly and use stable ID generation to detect drift"
+  - K2: "API rate limits or downtime block extraction | Retry with exponential backoff; mark paper as failed and allow re-run"
+  - K3: "Papers with unusual structure (no clear sections) produce poor extractions | Accept partial results; log warnings for sections that yield no items"
+  - K4: "Citation formats vary across papers | Support common formats ([1], [Author, Year]); log unmatched citations as warnings"
+
+demo: |
+  research-engine extract papers/markdown/2301.07041.md
+  # Output:
+  # extracting: 2301.07041
+  # extracted: 1, skipped: 0, failed: 0
+  cat knowledge/extracted/2301.07041-items.yaml
+  # Output: list of KnowledgeItems with type, content, paper_id, section, page, tags, citations
+
+references:
+  - prd003-extraction
+  - docs/ARCHITECTURE.md

@@ -1,0 +1,369 @@
+id: test-rel02.0-uc001-knowledge-extraction
+title: Knowledge Extraction from Structured Markdown
+description: >
+  Validates that the extraction stage reads structured Markdown, calls the
+  Generative AI API, and produces typed KnowledgeItems with provenance,
+  citations, and tags. Covers successful extraction, incremental skip,
+  re-extraction on change, malformed API response handling, retry on failure,
+  citation parsing, and tag assignment.
+traces:
+  - rel02.0-uc001-knowledge-extraction
+  - prd003-extraction
+tags:
+  - cli
+  - extraction
+  - smoke
+
+preconditions:
+  - The papers/markdown/ directory contains at least one valid structured Markdown file with section headings and page markers
+  - The papers/metadata/ directory contains a corresponding Paper YAML record
+  - The knowledge/extracted/ directory exists (or will be created by extract)
+  - The Generative AI API is reachable (or mocked in integration tests)
+
+test_cases:
+  - name: Extract typed knowledge items from a single paper
+    inputs:
+      command: research-engine extract papers/markdown/2301.07041.md
+      files:
+        papers/markdown/2301.07041.md: |
+          ---
+          id: 2301.07041
+          source_pdf: papers/raw/2301.07041.pdf
+          converted_at: 2026-01-15T10:00:00Z
+          ---
+          ## Abstract
+          <!-- page 1 -->
+          We propose a new attention mechanism that improves transformer efficiency.
+
+          ## Introduction
+          <!-- page 1 -->
+          Transformers [1] have become the dominant architecture for NLP tasks.
+          The standard attention mechanism has quadratic complexity in sequence length.
+
+          ## Method
+          <!-- page 2 -->
+          We define efficient attention as a linear approximation of softmax attention.
+          Our approach reduces computation from O(n^2) to O(n log n).
+
+          ## Results
+          <!-- page 3 -->
+          On the GLUE benchmark, our method achieves 89.2% accuracy, compared to 88.7% for the baseline.
+
+          ## References
+          [1] Vaswani et al., "Attention Is All You Need", NeurIPS 2017.
+        papers/metadata/2301.07041.yaml: |
+          id: 2301.07041
+          source_url: https://arxiv.org/pdf/2301.07041
+    expected:
+      exit_code: 0
+      stdout_contains: "extracting"
+      files:
+        knowledge/extracted/2301.07041-items.yaml:
+          exists: true
+          contains_types:
+            - claim
+            - method
+            - result
+
+  - name: Every item includes provenance fields
+    description: >
+      After extraction, each KnowledgeItem in the output must carry paper_id,
+      section, and page fields matching the source Markdown.
+    inputs:
+      command: research-engine extract papers/markdown/2301.07041.md
+    expected:
+      exit_code: 0
+      files:
+        knowledge/extracted/2301.07041-items.yaml:
+          every_item_has:
+            - paper_id
+            - section
+            - page
+
+  - name: Items preserve original language from source
+    description: >
+      The content field of each KnowledgeItem must contain text from the
+      source paper, not paraphrased or summarized text.
+    inputs:
+      command: research-engine extract papers/markdown/2301.07041.md
+    expected:
+      exit_code: 0
+      files:
+        knowledge/extracted/2301.07041-items.yaml:
+          contains: "O(n log n)"
+
+  - name: Confidence field is present and within range
+    inputs:
+      command: research-engine extract papers/markdown/2301.07041.md
+    expected:
+      exit_code: 0
+      files:
+        knowledge/extracted/2301.07041-items.yaml:
+          every_item_has:
+            - confidence
+          confidence_range:
+            min: 0.0
+            max: 1.0
+
+  - name: Stable IDs remain consistent across identical re-extraction
+    description: >
+      Running extract twice on the same unchanged Markdown should produce
+      the same item IDs. Since the second run is skipped (incremental), we
+      verify by extracting, deleting the output, extracting again, and
+      comparing IDs.
+    inputs:
+      command: |
+        research-engine extract papers/markdown/2301.07041.md
+        cp knowledge/extracted/2301.07041-items.yaml /tmp/first-run.yaml
+        rm knowledge/extracted/2301.07041-items.yaml
+        touch -t 202601160000 papers/markdown/2301.07041.md
+        research-engine extract papers/markdown/2301.07041.md
+    expected:
+      state:
+        ids_match: true
+
+  - name: Skip extraction when Markdown has not changed
+    inputs:
+      command: research-engine extract papers/markdown/2301.07041.md
+      precondition: >
+        knowledge/extracted/2301.07041-items.yaml already exists and
+        papers/markdown/2301.07041.md has not been modified since the last extraction
+    expected:
+      exit_code: 0
+      stdout_contains: "skipped"
+      state:
+        output_unchanged: true
+
+  - name: Re-extract when Markdown has changed
+    inputs:
+      command: research-engine extract papers/markdown/2301.07041.md
+      precondition: >
+        knowledge/extracted/2301.07041-items.yaml exists but
+        papers/markdown/2301.07041.md has a newer modification time
+    expected:
+      exit_code: 0
+      stdout_contains: "extracting"
+      files:
+        knowledge/extracted/2301.07041-items.yaml:
+          exists: true
+          updated: true
+
+  - name: Reject malformed API response
+    description: >
+      When the AI API returns a response that does not match the KnowledgeItem
+      schema, extract must log a warning and continue with valid items.
+    inputs:
+      command: research-engine extract papers/markdown/malformed-test.md
+      env:
+        MOCK_API_RESPONSE: '{"items": [{"type": "claim"}, {"invalid": true}]}'
+      files:
+        papers/markdown/malformed-test.md: |
+          ---
+          id: malformed-test
+          ---
+          ## Section One
+          <!-- page 1 -->
+          Some content here.
+        papers/metadata/malformed-test.yaml: "id: malformed-test\n"
+    expected:
+      exit_code: 0
+      stderr_contains: "malformed"
+      files:
+        knowledge/extracted/malformed-test-items.yaml:
+          exists: true
+
+  - name: Retry failed API calls up to 3 times
+    description: >
+      When the API returns transient errors, extract retries with exponential
+      backoff. After 3 failures the paper is marked as failed.
+    inputs:
+      command: research-engine extract papers/markdown/retry-test.md
+      env:
+        MOCK_API_FAILURES: "3"
+      files:
+        papers/markdown/retry-test.md: |
+          ---
+          id: retry-test
+          ---
+          ## Section
+          <!-- page 1 -->
+          Content for retry test.
+        papers/metadata/retry-test.yaml: "id: retry-test\n"
+    expected:
+      exit_code: 1
+      stderr_contains: "failed"
+      stdout_contains: "failed: 1"
+
+  - name: Retry succeeds on second attempt
+    inputs:
+      command: research-engine extract papers/markdown/retry-ok.md
+      env:
+        MOCK_API_FAILURES: "1"
+      files:
+        papers/markdown/retry-ok.md: |
+          ---
+          id: retry-ok
+          ---
+          ## Section
+          <!-- page 1 -->
+          Content for retry success test.
+        papers/metadata/retry-ok.yaml: "id: retry-ok\n"
+    expected:
+      exit_code: 0
+      stdout_contains: "extracting"
+      files:
+        knowledge/extracted/retry-ok-items.yaml:
+          exists: true
+
+  - name: Parse inline citations and link to bibliography
+    inputs:
+      command: research-engine extract papers/markdown/cite-test.md
+      files:
+        papers/markdown/cite-test.md: |
+          ---
+          id: cite-test
+          ---
+          ## Introduction
+          <!-- page 1 -->
+          Transformers [1] outperform recurrent models on translation [2].
+
+          ## References
+          [1] Vaswani et al., "Attention Is All You Need", NeurIPS 2017.
+          [2] Bahdanau et al., "Neural Machine Translation", ICLR 2015.
+        papers/metadata/cite-test.yaml: "id: cite-test\n"
+    expected:
+      exit_code: 0
+      files:
+        knowledge/extracted/cite-test-items.yaml:
+          has_citations: true
+          bibliography_count: 2
+          citation_links:
+            - citation: "[1]"
+              references: "Vaswani et al."
+            - citation: "[2]"
+              references: "Bahdanau et al."
+
+  - name: Assign topic tags to each KnowledgeItem
+    inputs:
+      command: research-engine extract papers/markdown/2301.07041.md
+    expected:
+      exit_code: 0
+      files:
+        knowledge/extracted/2301.07041-items.yaml:
+          every_item_has:
+            - tags
+          tags_format: "lowercase-hyphenated"
+
+  - name: Assign paper-level tags
+    inputs:
+      command: research-engine extract papers/markdown/2301.07041.md
+    expected:
+      exit_code: 0
+      files:
+        knowledge/extracted/2301.07041-items.yaml:
+          has_paper_tags: true
+          paper_tags_format: "lowercase-hyphenated"
+
+  - name: Batch extraction processes multiple papers
+    inputs:
+      command: research-engine extract --batch papers/markdown/
+      files:
+        papers/markdown/paper-a.md: |
+          ---
+          id: paper-a
+          ---
+          ## Section
+          <!-- page 1 -->
+          A claim about machine learning.
+        papers/markdown/paper-b.md: |
+          ---
+          id: paper-b
+          ---
+          ## Section
+          <!-- page 1 -->
+          A method for optimization.
+        papers/metadata/paper-a.yaml: "id: paper-a\n"
+        papers/metadata/paper-b.yaml: "id: paper-b\n"
+    expected:
+      exit_code: 0
+      stdout_contains: "extracted: 2"
+      files:
+        knowledge/extracted/paper-a-items.yaml:
+          exists: true
+        knowledge/extracted/paper-b-items.yaml:
+          exists: true
+
+  - name: Batch reports summary with counts
+    inputs:
+      command: research-engine extract --batch papers/markdown/
+      precondition: >
+        papers/markdown/ contains 3 papers; one has unchanged output (skipped),
+        one is new (extracted), one has an invalid PDF path (failed)
+    expected:
+      exit_code: 1
+      stdout_contains: "extracted: 1"
+      stdout_contains_also: "skipped: 1"
+      stderr_contains: "failed: 1"
+
+  - name: Non-zero exit code when any paper fails
+    inputs:
+      command: research-engine extract --batch papers/markdown/
+      env:
+        MOCK_API_FAILURES: "4"
+      files:
+        papers/markdown/fail-paper.md: |
+          ---
+          id: fail-paper
+          ---
+          ## Section
+          <!-- page 1 -->
+          Content.
+        papers/metadata/fail-paper.yaml: "id: fail-paper\n"
+    expected:
+      exit_code: 1
+
+  - name: Output YAML matches KnowledgeItem schema
+    description: >
+      The output file must be valid YAML containing a list of items where
+      each item has the required fields from the KnowledgeItem type definition.
+    inputs:
+      command: research-engine extract papers/markdown/2301.07041.md
+    expected:
+      exit_code: 0
+      files:
+        knowledge/extracted/2301.07041-items.yaml:
+          valid_yaml: true
+          every_item_has:
+            - id
+            - type
+            - content
+            - paper_id
+            - section
+            - page
+            - confidence
+            - tags
+
+  - name: Handle paper with no clear section headings
+    description: >
+      When a Markdown file lacks section headings, extract should still
+      attempt extraction using the full document as a single chunk.
+    inputs:
+      command: research-engine extract papers/markdown/no-sections.md
+      files:
+        papers/markdown/no-sections.md: |
+          ---
+          id: no-sections
+          ---
+          <!-- page 1 -->
+          This paper has no section headings. It discusses a method for image recognition.
+          The results show 95% accuracy on ImageNet.
+        papers/metadata/no-sections.yaml: "id: no-sections\n"
+    expected:
+      exit_code: 0
+      files:
+        knowledge/extracted/no-sections-items.yaml:
+          exists: true
+
+cleanup:
+  - Remove knowledge/extracted/ test output files
+  - Remove temporary papers/markdown/ and papers/metadata/ test fixtures
