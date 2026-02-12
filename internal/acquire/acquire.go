@@ -66,7 +66,15 @@ func AcquirePaper(client *http.Client, identifier string, cfg types.AcquisitionC
 		return p, true, nil
 	}
 
+	// For DOI identifiers, try OpenAlex first for open-access PDF.
+	var source string
 	pdfURL := PDFURL(idType, normalized)
+	if idType == TypeDOI {
+		if oaURL, err := resolveOpenAlex(client, normalized, cfg); err == nil && oaURL != "" {
+			pdfURL = oaURL
+			source = "openalex"
+		}
+	}
 	if pdfURL == "" {
 		return nil, false, fmt.Errorf("cannot resolve PDF URL for %q", identifier)
 	}
@@ -89,10 +97,14 @@ func AcquirePaper(client *http.Client, identifier string, cfg types.AcquisitionC
 	}
 
 	// Build Paper record (R3.1, R3.2).
+	if source == "" {
+		source = idType.String()
+	}
 	p := &types.Paper{
 		ID:               slug,
 		SourceURL:        pdfURL,
 		PDFPath:          pdfPath,
+		Source:           source,
 		ConversionStatus: types.ConversionNone,
 	}
 

@@ -133,6 +133,10 @@ func newTestServer(t *testing.T) *httptest.Server {
 		case strings.HasPrefix(r.URL.Path, "/works/"):
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprint(w, sampleCrossRefJSON)
+		case strings.HasPrefix(r.URL.Path, "/openalex/"):
+			// Default: no OA location available so DOI falls back to doi.org.
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"best_oa_location": null}`)
 		case strings.HasPrefix(r.URL.Path, "/doi/"):
 			// Simulate DOI redirect to PDF.
 			w.Header().Set("Content-Type", "application/pdf")
@@ -150,17 +154,20 @@ func overrideBaseURLs(tsURL string) func() {
 	origAPI := arxivAPIBase
 	origDOI := doiBase
 	origCR := crossrefAPIBase
+	origOA := openAlexAPIBase
 
 	arxivPDFBase = tsURL + "/pdf/"
 	arxivAPIBase = tsURL + "/api/query"
 	doiBase = tsURL + "/doi/"
 	crossrefAPIBase = tsURL + "/works/"
+	openAlexAPIBase = tsURL + "/openalex/"
 
 	return func() {
 		arxivPDFBase = origPDF
 		arxivAPIBase = origAPI
 		doiBase = origDOI
 		crossrefAPIBase = origCR
+		openAlexAPIBase = origOA
 	}
 }
 
@@ -282,6 +289,134 @@ func TestAcquirePaperSkipExisting(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "skipped:") {
 		t.Error("output should contain 'skipped:'")
+	}
+}
+
+func TestAcquirePaperDOIViaOpenAlex(t *testing.T) {
+	// Use a variable so the handler can reference the server URL after assignment.
+	var tsURL string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/openalex/"):
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"best_oa_location":{"pdf_url":"%s/pdf/oa-paper.pdf","landing_page_url":"https://example.com"}}`, tsURL)
+		case strings.HasPrefix(r.URL.Path, "/pdf/"):
+			w.Header().Set("Content-Type", "application/pdf")
+			fmt.Fprint(w, fakePDFContent)
+		case strings.HasPrefix(r.URL.Path, "/works/"):
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, sampleCrossRefJSON)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+	tsURL = ts.URL
+
+	origOA := openAlexAPIBase
+	origCR := crossrefAPIBase
+	origDOI := doiBase
+	openAlexAPIBase = ts.URL + "/openalex/"
+	crossrefAPIBase = ts.URL + "/works/"
+	doiBase = ts.URL + "/doi/"
+	defer func() {
+		openAlexAPIBase = origOA
+		crossrefAPIBase = origCR
+		doiBase = origDOI
+	}()
+
+	dir := t.TempDir()
+	cfg := testConfig(dir)
+	var buf bytes.Buffer
+
+	paper, skipped, err := AcquirePaper(ts.Client(), "10.1145/1234567.1234568", cfg, &buf)
+	if err != nil {
+		t.Fatalf("AcquirePaper: %v", err)
+	}
+	if skipped {
+		t.Error("expected download, got skipped")
+	}
+	if paper.Source != "openalex" {
+		t.Errorf("paper.Source = %q, want %q", paper.Source, "openalex")
+	}
+	if paper.Title != "CrossRef Paper Title" {
+		t.Errorf("paper.Title = %q, want %q", paper.Title, "CrossRef Paper Title")
+	}
+
+	// Verify PDF was downloaded.
+	pdfPath := filepath.Join(dir, "raw", "10.1145-1234567.1234568.pdf")
+	if _, err := os.Stat(pdfPath); err != nil {
+		t.Fatalf("PDF file missing: %v", err)
+	}
+}
+
+func TestAcquirePaperDOIFallbackWhenNoOA(t *testing.T) {
+	ts := newTestServer(t)
+	defer ts.Close()
+	restore := overrideBaseURLs(ts.URL)
+	defer restore()
+
+	dir := t.TempDir()
+	cfg := testConfig(dir)
+	var buf bytes.Buffer
+
+	paper, skipped, err := AcquirePaper(ts.Client(), "10.1145/1234567.1234568", cfg, &buf)
+	if err != nil {
+		t.Fatalf("AcquirePaper: %v", err)
+	}
+	if skipped {
+		t.Error("expected download, got skipped")
+	}
+	// When OpenAlex has no OA, source should be "doi".
+	if paper.Source != "doi" {
+		t.Errorf("paper.Source = %q, want %q", paper.Source, "doi")
+	}
+}
+
+func TestAcquirePaperArxivBypassesOpenAlex(t *testing.T) {
+	openAlexCalled := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/openalex/"):
+			openAlexCalled = true
+			http.NotFound(w, r)
+		case strings.HasPrefix(r.URL.Path, "/pdf/"):
+			w.Header().Set("Content-Type", "application/pdf")
+			fmt.Fprint(w, fakePDFContent)
+		case r.URL.Path == "/api/query":
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprint(w, sampleArxivXML)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	origPDF := arxivPDFBase
+	origAPI := arxivAPIBase
+	origOA := openAlexAPIBase
+	arxivPDFBase = ts.URL + "/pdf/"
+	arxivAPIBase = ts.URL + "/api/query"
+	openAlexAPIBase = ts.URL + "/openalex/"
+	defer func() {
+		arxivPDFBase = origPDF
+		arxivAPIBase = origAPI
+		openAlexAPIBase = origOA
+	}()
+
+	dir := t.TempDir()
+	cfg := testConfig(dir)
+	var buf bytes.Buffer
+
+	paper, _, err := AcquirePaper(ts.Client(), "2301.07041", cfg, &buf)
+	if err != nil {
+		t.Fatalf("AcquirePaper: %v", err)
+	}
+	if openAlexCalled {
+		t.Error("OpenAlex should not be called for arXiv identifiers")
+	}
+	if paper.Source != "arxiv" {
+		t.Errorf("paper.Source = %q, want %q", paper.Source, "arxiv")
 	}
 }
 

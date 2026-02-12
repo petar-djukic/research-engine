@@ -38,6 +38,9 @@ type Paper struct {
 	// Abstract is the paper abstract.
 	Abstract string `json:"abstract" yaml:"abstract"`
 
+	// Source identifies which backend provided the PDF (e.g. "arxiv", "doi", "openalex", "url").
+	Source string `json:"source,omitempty" yaml:"source,omitempty"`
+
 	// ConversionStatus tracks whether the PDF has been converted to Markdown.
 	ConversionStatus ConversionStatus `json:"conversion_status" yaml:"conversion_status"`
 }

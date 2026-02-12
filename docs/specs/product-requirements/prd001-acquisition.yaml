@@ -15,8 +15,6 @@ problem: |
   provenance so every subsequent pipeline stage can trace data back to its
   origin.
 
-# TODO: include open Alex as an acquisition mechanism https://api.openalex.org, prefer downloading from Open alex if paper avilable there.
-
 goals:
   - G1: Accept arXiv IDs, DOIs, and direct PDF URLs as input and resolve each to a downloadable PDF
   - G2: Download PDFs to a consistent local directory with predictable file naming
