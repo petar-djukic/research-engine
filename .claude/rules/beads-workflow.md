@@ -1,3 +1,5 @@
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Beads (bd) Issue Tracking and Session Completion Workflow
 
 ## Working Offline

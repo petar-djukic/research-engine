@@ -3,6 +3,8 @@ name: read-papers
 description: Browse and read converted Markdown papers
 ---
 
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Read Papers
 
 Browse and read papers that have been converted to Markdown. You read the files directly using the Read tool. No CLI command is needed.

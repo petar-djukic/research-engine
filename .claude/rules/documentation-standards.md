@@ -1,6 +1,9 @@
 ---
 globs: "docs/**"
 ---
+
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Documentation Standards
 
 ## Writing Style

@@ -1,3 +1,5 @@
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Claude Code Configuration
 
 This directory contains custom instructions and rules for the Claude Code agent.

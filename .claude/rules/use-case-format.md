@@ -1,6 +1,9 @@
 ---
 globs: "docs/specs/use-cases/**"
 ---
+
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Use Case Format
 
 Use cases are YAML files stored at `docs/specs/use-cases/rel[NN].[N]-uc[NNN]-[short-name].yaml`.

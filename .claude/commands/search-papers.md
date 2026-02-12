@@ -3,6 +3,8 @@ name: search-papers
 description: Search for academic papers on a topic, recommend acquisitions
 ---
 
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Search Papers
 
 Search for academic papers on a research topic. You formulate queries, run the search CLI, interpret results, and recommend which papers to acquire.

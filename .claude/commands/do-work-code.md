@@ -3,6 +3,8 @@ name: do-work-code
 description: Implement a code task following PRD and architecture specifications
 ---
 
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Command: Do Work (Code)
 
 Use this command when the work is **code** (implementation): packages, internal logic, cmd, workers, tests. Follow the **code-prd-architecture-linking** rule (`.claude/rules/code-prd-architecture-linking.md`): code must correspond to existing PRDs and architecture; commits must mention PRDs; add PRD references in code where appropriate (e.g. top of file).

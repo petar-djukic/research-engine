@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 // Package types defines shared data structures for the research-engine pipeline.
 // Implements: prd006-search (SearchResult, R4.1, R4.4);
 //

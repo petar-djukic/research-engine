@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 // Package main is the entry point for the research-engine CLI.
 // Implements: prd006-search, prd001-acquisition, prd002-conversion,
 //             prd003-extraction, prd004-knowledge-base (CLI surface).

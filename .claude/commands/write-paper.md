@@ -3,6 +3,8 @@ name: write-paper
 description: Create a structured paper project and write sections with citations
 ---
 
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Write Paper
 
 Create a structured paper project and iteratively write sections with inline citations grounded in the knowledge base and source papers. The researcher and Claude develop the paper together through four phases: initialize, outline, write, and refine.

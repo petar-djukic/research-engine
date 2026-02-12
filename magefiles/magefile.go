@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 // Package main contains Mage build targets for research-engine developer tooling.
 // Implements: docs/ARCHITECTURE § Developer Tooling, § Technology Choices (Pandoc).
 package main

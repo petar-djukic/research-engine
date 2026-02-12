@@ -1,6 +1,9 @@
 ---
 globs: "docs/specs/product-requirements/**"
 ---
+
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # PRD Format
 
 PRDs are YAML files stored at `/docs/specs/product-requirements/prd[NNN]-[feature-name].yaml`.

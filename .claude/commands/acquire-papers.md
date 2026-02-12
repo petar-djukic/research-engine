@@ -3,6 +3,8 @@ name: acquire-papers
 description: Download papers, convert to Markdown, and optionally extract knowledge
 ---
 
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Acquire Papers
 
 Download papers by identifier, convert them to readable Markdown, and optionally extract knowledge items. This combines three infrastructure stages (acquire, convert, extract) into one researcher-facing action.

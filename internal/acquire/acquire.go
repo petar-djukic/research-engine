@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 // Package acquire downloads papers and creates metadata records.
 // Implements: prd001-acquisition (R1-R5);
 //

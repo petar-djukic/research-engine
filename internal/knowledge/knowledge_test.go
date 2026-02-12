@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 package knowledge
 
 import (

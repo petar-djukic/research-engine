@@ -1,3 +1,5 @@
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Research Engine
 
 A Claude-powered research tool for academic papers. Claude drives the research workflow through skills: searching for papers, reading them, querying a knowledge base, and writing new work with citations. A Go CLI provides the infrastructure: downloading PDFs, converting them to Markdown so Claude can read them, extracting typed knowledge items, and indexing them for retrieval.

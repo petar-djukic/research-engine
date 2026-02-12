@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 // Package extract identifies typed knowledge items within converted text.
 // citations.go handles citation graph construction and automatic tagging.
 // Implements: prd003-extraction (R3, R4);

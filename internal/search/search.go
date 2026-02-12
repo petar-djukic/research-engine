@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 // Package search queries academic APIs and returns unified, deduplicated results.
 // Implements: prd006-search (R1-R5);
 //

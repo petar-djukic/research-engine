@@ -1,3 +1,5 @@
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Research Pipeline Instructions
 
 This repository contains tools and workflows for managing academic research papers - from consumption to production.

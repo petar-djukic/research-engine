@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 // Package container implements container runtime detection and execution.
 // Implements: prd002-conversion R5.5-R5.10 (container runtime strategy);
 //

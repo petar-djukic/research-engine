@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 // Package extract identifies typed knowledge items within converted text.
 // Implements: prd003-extraction (R1, R2, R5, R6);
 //

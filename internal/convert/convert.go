@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 // Package convert implements PDF-to-Markdown conversion with pluggable backends.
 // Implements: prd002-conversion (R4, R5, R6);
 //

@@ -1,6 +1,9 @@
 ---
 globs: ".beads/**"
 ---
+
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Issue Format
 
 Beads issues fall into two deliverable types: **documentation** (markdown in `docs/`) and **code** (implementation). The issue description must make the type and output location explicit so agents know what to produce and where.

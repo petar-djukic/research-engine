@@ -3,6 +3,8 @@ name: query-knowledge
 description: Search the knowledge base for extracted items across papers
 ---
 
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Query Knowledge
 
 Search the knowledge base to find extracted knowledge items across all papers. You run the retrieve CLI, interpret results, and help the researcher find connections, trace items to sources, and identify themes.

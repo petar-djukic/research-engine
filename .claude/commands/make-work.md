@@ -3,6 +3,8 @@ name: make-work
 description: Review project state and propose next tasks based on roadmap and releases
 ---
 
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Command: Make Work
 
 Read VISION.md, ARCHITECTURE.md, road-map.yaml, docs/specs/product-requirements/README.md, and docs/specs/use-cases/README.md if they exist.

@@ -1,3 +1,5 @@
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Claude Research Skills
 
 We define five research skills in `.claude/commands/` that form the primary interface between the researcher and the system. This guideline describes the design philosophy behind those skills, the conventions each skill follows, and how they compose into a research workflow. It exists because skills are the layer the researcher touches most. Understanding their design keeps the set consistent as we add new ones and helps contributors see where Claude's judgment ends and CLI infrastructure begins.

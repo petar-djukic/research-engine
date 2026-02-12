@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 // Package knowledge persists KnowledgeItems and builds a retrieval index.
 // Implements: prd004-knowledge-base (R1-R6);
 //

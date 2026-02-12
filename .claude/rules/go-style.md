@@ -1,6 +1,9 @@
 ---
 globs: "**/*.go"
 ---
+
+<!-- Copyright Mesh Intelligence Inc., 2026. All rights reserved. -->
+
 # Go Code Style
 
 Rules for writing maintainable Go code in this project.

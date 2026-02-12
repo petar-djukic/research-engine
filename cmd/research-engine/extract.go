@@ -1,3 +1,5 @@
+// Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
 // Extract CLI command wires the extraction stage to the command line.
 // Implements: prd003-extraction R6 (CLI surface, batch processing).
 package main
