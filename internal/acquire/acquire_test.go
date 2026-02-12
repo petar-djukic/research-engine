@@ -143,6 +143,9 @@ func newTestServer(t *testing.T) *httptest.Server {
 			// Simulate DOI redirect to PDF.
 			w.Header().Set("Content-Type", "application/pdf")
 			fmt.Fprint(w, fakePDFContent)
+		case strings.HasPrefix(r.URL.Path, "/patent-pdf/"):
+			w.Header().Set("Content-Type", "application/pdf")
+			fmt.Fprint(w, fakePDFContent)
 		default:
 			http.NotFound(w, r)
 		}
@@ -157,12 +160,14 @@ func overrideBaseURLs(tsURL string) func() {
 	origDOI := doiBase
 	origCR := crossrefAPIBase
 	origOA := openAlexAPIBase
+	origPatent := googlePatentsPDFBase
 
 	arxivPDFBase = tsURL + "/pdf/"
 	arxivAPIBase = tsURL + "/api/query"
 	doiBase = tsURL + "/doi/"
 	crossrefAPIBase = tsURL + "/works/"
 	openAlexAPIBase = tsURL + "/openalex/"
+	googlePatentsPDFBase = tsURL + "/patent-pdf/"
 
 	return func() {
 		arxivPDFBase = origPDF
@@ -170,6 +175,7 @@ func overrideBaseURLs(tsURL string) func() {
 		doiBase = origDOI
 		crossrefAPIBase = origCR
 		openAlexAPIBase = origOA
+		googlePatentsPDFBase = origPatent
 	}
 }
 
