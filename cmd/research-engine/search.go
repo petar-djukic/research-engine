@@ -66,6 +66,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	recencyBias, _ := cmd.Flags().GetBool("recency-bias")
 	queryFile, _ := cmd.Flags().GetString("query-file")
 	patentsViewAPIKey, _ := cmd.Flags().GetString("patentsview-api-key")
+	patentsViewAPIKey = secretDefault("patentsview-api-key", patentsViewAPIKey)
 	patentsOnly, _ := cmd.Flags().GetBool("patents")
 
 	// If no --query flag, use positional args as the query.
@@ -112,14 +113,16 @@ func runSearch(cmd *cobra.Command, args []string) error {
 			Timeout:   defaultSearchTimeout,
 			UserAgent: defaultUserAgent,
 		},
-		MaxResults:        maxResults,
-		EnableArxiv:       !patentsOnly,
+		MaxResults:           maxResults,
+		EnableArxiv:          !patentsOnly,
 		EnableSemanticScholar: !patentsOnly,
-		EnableOpenAlex:    !patentsOnly,
-		EnablePatentsView: patentsOnly || patentsViewAPIKey != "",
-		PatentsViewAPIKey: patentsViewAPIKey,
-		InterBackendDelay: 1 * time.Second,
-		RecencyBiasWindow: 2 * 365 * 24 * time.Hour,
+		EnableOpenAlex:       !patentsOnly,
+		EnablePatentsView:    patentsOnly || patentsViewAPIKey != "",
+		PatentsViewAPIKey:    patentsViewAPIKey,
+		SemanticScholarAPIKey: secretDefault("semantic-scholar-api-key", ""),
+		OpenAlexEmail:        secretDefault("openalex-email", ""),
+		InterBackendDelay:    1 * time.Second,
+		RecencyBiasWindow:    2 * 365 * 24 * time.Hour,
 	}
 
 	client := &http.Client{Timeout: cfg.Timeout}

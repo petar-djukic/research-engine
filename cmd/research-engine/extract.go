@@ -146,6 +146,7 @@ func extractionConfig(cmd *cobra.Command) types.ExtractionConfig {
 	if apiKey == "" {
 		apiKey = viper.GetString("extraction.api_key")
 	}
+	apiKey = secretDefault("anthropic-api-key", apiKey)
 	if papersDir == "papers" {
 		if v := viper.GetString("extraction.papers_dir"); v != "" {
 			papersDir = v
