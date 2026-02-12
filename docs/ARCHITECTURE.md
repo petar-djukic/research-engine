@@ -197,15 +197,15 @@ See PRD: Paper Writing for the project structure, file naming, and citation conv
 
 ### Search
 
-We query academic APIs to find papers relevant to a research question. The search component accepts free-text queries or structured parameters (author, keywords, date range), fans them out to multiple backends (arXiv API, Semantic Scholar API), deduplicates results across sources, and returns a ranked list of candidate papers. Each result carries an identifier that the acquisition stage can consume directly, along with title, authors, abstract, and a relevance score. The backend interface is extensible so we can add sources without modifying existing backend code.
+We query academic and patent APIs to find papers and patents relevant to a research question. The search component accepts free-text queries or structured parameters (author, keywords, date range), fans them out to multiple backends (arXiv API, Semantic Scholar API, OpenAlex API, PatentsView API), deduplicates results across sources, and returns a ranked list of candidate papers and patents. Each result carries an identifier that the acquisition stage can consume directly, along with title, authors, abstract, and a relevance score. The backend interface is extensible so we can add sources without modifying existing backend code. Patent results use US patent numbers as identifiers (e.g. US7654321) and participate in the same deduplication and ranking pipeline as academic results, with kind-code normalization to prevent duplicate patents.
 
-See PRD: Paper Search for query interface, backend requirements, deduplication rules, and output format.
+See PRD: Paper Search for query interface, backend requirements, deduplication rules, and output format. See PRD: Patent Search for PatentsView query translation, result mapping, and rate limiting.
 
 ### Acquisition
 
-We download papers from URLs, DOIs, or arXiv identifiers and store them locally. The acquisition component resolves identifiers to PDF download links, fetches the PDF, and creates a Paper metadata record. It handles arXiv abstract-to-PDF URL mapping, DOI resolution through content negotiation, OpenAlex open-access resolution, and direct PDF URLs. When a paper already exists on disk, acquisition skips the download and returns the existing record.
+We download papers and patents from URLs, DOIs, arXiv identifiers, or US patent numbers and store them locally. The acquisition component resolves identifiers to PDF download links, fetches the PDF, and creates a metadata record. It handles arXiv abstract-to-PDF URL mapping, DOI resolution through content negotiation, OpenAlex open-access resolution, direct PDF URLs, and US patent number resolution through Google Patents storage. Patent identifiers (e.g. US7654321, US7654321B2, US20230012345A1) are auto-detected by format; no type flag is required. When a Google Patents PDF is unavailable, acquisition falls back to the Google Patents HTML page. When the PatentsView API key is configured, acquisition also fetches patent metadata (title, inventors, date) from the PatentsView API. Papers and patents that already exist on disk are skipped automatically.
 
-See PRD: Paper Acquisition for identifier resolution rules, retry behavior, and metadata fields.
+See PRD: Paper Acquisition for identifier resolution rules, retry behavior, and metadata fields. See PRD: Patent Search for patent identifier resolution, PDF URL construction, and metadata fetch.
 
 ### Conversion
 
@@ -271,8 +271,9 @@ Table 4 Technology Choices
 |-----------|-----------|---------|
 | Implementation language | Go | Infrastructure implementation, CLI, type safety |
 | Build automation | Mage | Build automation, testing, developer tooling, paper compilation |
-| Academic search | arXiv API, Semantic Scholar API | Query academic sources for candidate papers |
-| Open-access resolution | OpenAlex API | Prefer open-access PDF downloads for DOI identifiers |
+| Academic search | arXiv API, Semantic Scholar API, OpenAlex API | Query academic sources for candidate papers |
+| Patent search | PatentsView API (USPTO) | Query US patents and published applications |
+| Patent PDF retrieval | Google Patents storage | Download patent PDFs by patent number |
 | PDF conversion | MarkItDown (container-based) | Transform PDF to structured Markdown |
 | Knowledge storage | SQLite with FTS5 | Full-text indexed knowledge base with structured queries |
 | Knowledge export | YAML/JSON files | Human-readable, version-controllable item export |
@@ -325,6 +326,7 @@ research-engine/
       product-requirements/
       use-cases/
       test-suites/
+  .secrets/                  # API keys and credentials (not committed to git)
   papers/                    # Working directory for acquired papers (per-project)
   knowledge/                 # Working directory for knowledge base (per-project)
   output/
@@ -335,10 +337,11 @@ Table 5 Package Roles
 
 | Directory | Role |
 |-----------|------|
+| .secrets/ | API keys loaded at runtime. Not committed to git. |
 | .claude/commands/ | Claude research skills. The researcher's primary interface to the tool. |
 | cmd/research-engine/ | CLI entry point and Cobra subcommands. Infrastructure interface. |
-| internal/search/ | Queries academic APIs, deduplicates and ranks candidate papers. |
-| internal/acquire/ | Downloads papers, resolves identifiers, creates Paper records. |
+| internal/search/ | Queries academic and patent APIs, deduplicates and ranks candidate papers and patents. |
+| internal/acquire/ | Downloads papers and patents, resolves identifiers, creates metadata records. |
 | internal/convert/ | Invokes PDF conversion tools, produces structured Markdown. |
 | internal/extract/ | Calls Generative AI to classify and extract KnowledgeItems. |
 | internal/knowledge/ | Persists KnowledgeItems, builds and queries the retrieval index. |
@@ -353,8 +356,8 @@ We have completed the Foundation, Core Pipeline, and Knowledge phases. The Skill
 
 Implemented packages:
 
-- `internal/search/` — arXiv and Semantic Scholar backends, deduplication, CSL YAML output, query file persistence
-- `internal/acquire/` — identifier resolution (arXiv, DOI, direct URL, OpenAlex), PDF download with retry and rate limiting
+- `internal/search/` — arXiv, Semantic Scholar, OpenAlex, and PatentsView backends, deduplication (with patent kind-code normalization), CSL YAML output, query file persistence
+- `internal/acquire/` — identifier resolution (arXiv, DOI, direct URL, OpenAlex, US patent numbers), PDF download with retry and rate limiting, patent PDF from Google Patents storage with fallback
 - `internal/convert/` — PDF-to-Markdown conversion via MarkItDown in a container runtime
 - `internal/container/` — container runtime abstraction (Docker and Podman support)
 - `internal/extract/` — AI-based knowledge extraction with citation graph and tagging
@@ -381,6 +384,7 @@ Table 7 Related Documents
 | PRD: PDF Conversion | Requirements for transforming PDFs to structured text |
 | PRD: Knowledge Extraction | Requirements for identifying typed knowledge items |
 | PRD: Knowledge Base | Requirements for storage, indexing, and retrieval |
+| PRD: Patent Search | Requirements for PatentsView backend, patent identifier resolution, and patent PDF acquisition |
 | PRD: Paper Writing | Requirements for Claude-driven paper writing workflow (supersedes PRD: Paper Generation) |
 
 ## References
