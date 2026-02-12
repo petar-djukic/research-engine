@@ -11,10 +11,13 @@ Download papers by identifier, convert them to readable Markdown, and optionally
 
 ## Input
 
-The researcher provides one or more paper identifiers via `$ARGUMENTS`. Accepted identifier formats:
+The researcher provides one or more paper or patent identifiers via `$ARGUMENTS`. Accepted identifier formats:
 - arXiv IDs: `2301.01234` or `arxiv:2301.01234`
 - DOIs: `10.1234/example` or `doi:10.1234/example`
+- US patent numbers: `US7654321`, `US7654321B2`, `US20230012345A1`
 - Direct PDF URLs: `https://example.com/paper.pdf`
+
+Patent identifiers are auto-detected by their format (US prefix followed by digits, with an optional kind code like B2 or A1). No `--type` flag is needed.
 
 If no arguments are given, ask the researcher which papers to acquire.
 
@@ -31,7 +34,9 @@ If no arguments are given, ask the researcher which papers to acquire.
    - `--timeout`: HTTP request timeout (default: 60s)
    - `--delay`: delay between downloads (default: 1s)
 
-   The CLI resolves identifiers, downloads PDFs, and creates metadata YAML files. For DOIs, it tries OpenAlex first for open-access PDFs before falling back to publisher URLs.
+   The CLI resolves identifiers, downloads PDFs, and creates metadata YAML files. For DOIs, it tries OpenAlex first for open-access PDFs before falling back to publisher URLs. For patent identifiers, it downloads PDFs from Google Patents storage and falls back to the Google Patents HTML page if the direct PDF is unavailable.
+
+   When the PatentsView API key is configured (via `.secrets/patentsview-api-key`), the CLI also fetches patent metadata (title, inventors, date) from the PatentsView API and writes it to the metadata YAML file.
 
 2. **Convert to Markdown.** Transform downloaded PDFs into structured Markdown that you can read:
 
@@ -80,5 +85,7 @@ papers/
 ## Tips
 
 - Acquire in batches. The CLI handles multiple identifiers in one call with rate limiting between downloads.
+- Mix paper and patent identifiers in the same command: `research-engine acquire 2301.01234 US11734097 10.1234/example`.
+- Patent PDFs are stored alongside paper PDFs in `papers/raw/` (e.g. `papers/raw/US11734097.pdf`).
 - If conversion fails, check that Docker or Podman is running. The MarkItDown backend runs in a container.
-- Papers that already exist on disk are skipped automatically. Re-running acquire is safe.
+- Papers and patents that already exist on disk are skipped automatically. Re-running acquire is safe.
