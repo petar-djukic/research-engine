@@ -50,6 +50,12 @@ func (f *failNTimesBackend) Extract(_ context.Context, _ string) (AIResponse, er
 	return f.response, nil
 }
 
+func TestMain(m *testing.M) {
+	// Override backoff to avoid real sleeps in retry tests.
+	backoffBase = time.Millisecond
+	os.Exit(m.Run())
+}
+
 func testConfig(papersDir, knowledgeDir string) types.ExtractionConfig {
 	return types.ExtractionConfig{
 		AIConfig: types.AIConfig{

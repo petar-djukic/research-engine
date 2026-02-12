@@ -219,7 +219,6 @@ func chunkByHeadings(content string) []section {
 		if isHeading(trimmed) {
 			flush()
 			currentHeading = stripHeadingPrefix(trimmed)
-			currentPage = currentPage // carry forward
 			continue
 		}
 
