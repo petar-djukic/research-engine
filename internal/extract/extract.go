@@ -134,15 +134,17 @@ func ExtractAll(ctx context.Context, backend AIBackend, cfg types.ExtractionConf
 }
 
 // ExtractPaper extracts knowledge items from a single paper's Markdown.
-// It chunks the Markdown by section headings and calls the AI backend
-// for each chunk (R5.1, R5.3).
+// It chunks the Markdown by section headings, calls the AI backend for
+// each chunk (R5.1, R5.3), then builds the citation graph (R3) and
+// aggregates paper-level tags (R4.3).
 func ExtractPaper(ctx context.Context, backend AIBackend, paperID, mdPath string, cfg types.ExtractionConfig) (*types.ExtractionResult, error) {
 	content, err := os.ReadFile(mdPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading markdown %s: %w", mdPath, err)
 	}
 
-	sections := chunkByHeadings(string(content))
+	fullText := string(content)
+	sections := chunkByHeadings(fullText)
 
 	result := &types.ExtractionResult{
 		PaperID: paperID,
@@ -172,6 +174,16 @@ func ExtractPaper(ctx context.Context, backend AIBackend, paperID, mdPath string
 
 		result.Items = append(result.Items, items...)
 	}
+
+	// Citation graph construction (R3.1-R3.4).
+	result.Bibliography = ParseBibliography(fullText)
+	for i := range result.Items {
+		citations := ParseCitations(result.Items[i].Content)
+		result.Items[i].Citations = LinkCitations(citations, result.Bibliography)
+	}
+
+	// Paper-level tag aggregation (R4.3).
+	result.PaperTags = AggregatePaperTags(result.Items)
 
 	return result, nil
 }

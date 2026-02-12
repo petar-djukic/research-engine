@@ -664,3 +664,489 @@ func TestRenderPrompt(t *testing.T) {
 		t.Error("prompt should contain extraction instructions")
 	}
 }
+
+// --- ParseCitations ---
+
+func TestParseCitations(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		wantKeys []string
+	}{
+		{
+			name:     "numeric citations",
+			text:     "As shown in [1] and confirmed by [2], the method works.",
+			wantKeys: []string{"1", "2"},
+		},
+		{
+			name:     "author-year citation",
+			text:     "According to [Smith et al., 2020], transformers outperform RNNs.",
+			wantKeys: []string{"Smith et al., 2020"},
+		},
+		{
+			name:     "mixed formats",
+			text:     "Prior work [1] and [Jones, 2019] both report similar findings [3].",
+			wantKeys: []string{"1", "3", "Jones, 2019"},
+		},
+		{
+			name:     "no citations",
+			text:     "This sentence has no citations at all.",
+			wantKeys: nil,
+		},
+		{
+			name:     "duplicate numeric citation",
+			text:     "See [1] for details and also [1] for more.",
+			wantKeys: []string{"1"},
+		},
+		{
+			name:     "author and coauthor",
+			text:     "As described by [Smith and Jones, 2021], the results hold.",
+			wantKeys: []string{"Smith and Jones, 2021"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			citations := ParseCitations(tt.text)
+			var gotKeys []string
+			for _, c := range citations {
+				gotKeys = append(gotKeys, c.Key)
+			}
+			if len(gotKeys) != len(tt.wantKeys) {
+				t.Errorf("got %d citations %v, want %d %v", len(gotKeys), gotKeys, len(tt.wantKeys), tt.wantKeys)
+				return
+			}
+			for i, want := range tt.wantKeys {
+				if gotKeys[i] != want {
+					t.Errorf("citation[%d].Key = %q, want %q", i, gotKeys[i], want)
+				}
+			}
+			// All unlinked citations should have BibIndex -1.
+			for i, c := range citations {
+				if c.BibIndex != -1 {
+					t.Errorf("citation[%d].BibIndex = %d, want -1", i, c.BibIndex)
+				}
+			}
+		})
+	}
+}
+
+// --- ParseBibliography ---
+
+func TestParseBibliography(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		wantCount int
+		wantKeys  []string
+	}{
+		{
+			name: "numbered bibliography",
+			content: `## Introduction
+
+Some text.
+
+## References
+
+[1] Smith, A. and Jones, B. Attention is all you need. NeurIPS, 2017.
+[2] Brown, T. et al. Language models are few-shot learners. NeurIPS, 2020.
+[3] Devlin, J. BERT: Pre-training of deep bidirectional transformers. NAACL, 2019.
+`,
+			wantCount: 3,
+			wantKeys:  []string{"1", "2", "3"},
+		},
+		{
+			name: "bibliography heading",
+			content: `## Methods
+
+Details.
+
+## Bibliography
+
+[1] Author, A. Title of paper. Journal, 2020.
+`,
+			wantCount: 1,
+			wantKeys:  []string{"1"},
+		},
+		{
+			name:      "no references section",
+			content:   "## Introduction\n\nText.\n\n## Methods\n\nMore text.",
+			wantCount: 0,
+			wantKeys:  nil,
+		},
+		{
+			name: "references with following section",
+			content: `## References
+
+[1] Author A. Title one. Journal, 2020.
+[2] Author B. Title two. Conference, 2021.
+
+## Appendix
+
+Extra material.
+`,
+			wantCount: 2,
+			wantKeys:  []string{"1", "2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entries := ParseBibliography(tt.content)
+			if len(entries) != tt.wantCount {
+				t.Errorf("got %d entries, want %d", len(entries), tt.wantCount)
+				for i, e := range entries {
+					t.Logf("  entry[%d]: key=%q title=%q", i, e.Key, e.Title)
+				}
+				return
+			}
+			for i, wantKey := range tt.wantKeys {
+				if entries[i].Key != wantKey {
+					t.Errorf("entry[%d].Key = %q, want %q", i, entries[i].Key, wantKey)
+				}
+			}
+		})
+	}
+}
+
+func TestParseBibEntryMetadata(t *testing.T) {
+	content := `## References
+
+[1] Smith, A. and Jones, B. Attention is all you need. NeurIPS, 2017.
+`
+	entries := ParseBibliography(content)
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1", len(entries))
+	}
+
+	e := entries[0]
+	if e.Year != "2017" {
+		t.Errorf("Year = %q, want %q", e.Year, "2017")
+	}
+	if e.Title != "Attention is all you need" {
+		t.Errorf("Title = %q, want %q", e.Title, "Attention is all you need")
+	}
+	if len(e.Authors) == 0 {
+		t.Error("Authors is empty")
+	}
+}
+
+// --- LinkCitations ---
+
+func TestLinkCitations(t *testing.T) {
+	bibliography := []types.BibliographyEntry{
+		{Key: "1", Title: "Paper One", Year: "2020"},
+		{Key: "2", Title: "Paper Two", Year: "2021"},
+		{Key: "3", Title: "Paper Three", Year: "2022"},
+	}
+
+	tests := []struct {
+		name     string
+		citations []types.Citation
+		wantIdx  []int
+	}{
+		{
+			name: "all match",
+			citations: []types.Citation{
+				{Key: "1", BibIndex: -1},
+				{Key: "3", BibIndex: -1},
+			},
+			wantIdx: []int{0, 2},
+		},
+		{
+			name: "partial match",
+			citations: []types.Citation{
+				{Key: "1", BibIndex: -1},
+				{Key: "99", BibIndex: -1},
+			},
+			wantIdx: []int{0, -1},
+		},
+		{
+			name:      "empty citations",
+			citations: nil,
+			wantIdx:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			linked := LinkCitations(tt.citations, bibliography)
+			if len(linked) != len(tt.wantIdx) {
+				t.Errorf("got %d citations, want %d", len(linked), len(tt.wantIdx))
+				return
+			}
+			for i, wantBib := range tt.wantIdx {
+				if linked[i].BibIndex != wantBib {
+					t.Errorf("citation[%d].BibIndex = %d, want %d", i, linked[i].BibIndex, wantBib)
+				}
+			}
+		})
+	}
+}
+
+func TestLinkCitationsEmptyBibliography(t *testing.T) {
+	citations := []types.Citation{
+		{Key: "1", BibIndex: -1},
+	}
+	linked := LinkCitations(citations, nil)
+	if len(linked) != 1 {
+		t.Fatalf("got %d citations, want 1", len(linked))
+	}
+	if linked[0].BibIndex != -1 {
+		t.Errorf("BibIndex = %d, want -1 (no bibliography to match)", linked[0].BibIndex)
+	}
+}
+
+// --- AggregatePaperTags ---
+
+func TestAggregatePaperTags(t *testing.T) {
+	tests := []struct {
+		name     string
+		items    []types.KnowledgeItem
+		wantTags []string
+	}{
+		{
+			name: "unique tags sorted",
+			items: []types.KnowledgeItem{
+				{Tags: []string{"transformer", "attention"}},
+				{Tags: []string{"benchmark", "transformer"}},
+			},
+			wantTags: []string{"attention", "benchmark", "transformer"},
+		},
+		{
+			name:     "no items",
+			items:    nil,
+			wantTags: []string{},
+		},
+		{
+			name: "items without tags",
+			items: []types.KnowledgeItem{
+				{Tags: nil},
+				{Tags: []string{}},
+			},
+			wantTags: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tags := AggregatePaperTags(tt.items)
+			if len(tags) != len(tt.wantTags) {
+				t.Errorf("got %d tags %v, want %d %v", len(tags), tags, len(tt.wantTags), tt.wantTags)
+				return
+			}
+			for i, want := range tt.wantTags {
+				if tags[i] != want {
+					t.Errorf("tag[%d] = %q, want %q", i, tags[i], want)
+				}
+			}
+		})
+	}
+}
+
+// --- Integration: ExtractPaper with citations and tags ---
+
+func TestExtractPaperCitationsAndTags(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdDir := filepath.Join(tmpDir, "papers", markdownDir)
+	if err := os.MkdirAll(mdDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	mdContent := `## Introduction
+
+Transformers [1] have revolutionized NLP. Building on prior work [2], we propose
+an improved attention mechanism.
+
+## Methods
+
+We extend the self-attention layer described in [1] with sparse attention.
+
+## Results
+
+Our method outperforms the baseline [3] by 5% on GLUE.
+
+## References
+
+[1] Vaswani, A. et al. Attention is all you need. NeurIPS, 2017.
+[2] Devlin, J. et al. BERT: Pre-training of deep bidirectional transformers. NAACL, 2019.
+[3] Brown, T. et al. Language models are few-shot learners. NeurIPS, 2020.
+`
+	mdPath := filepath.Join(mdDir, "cite-paper.md")
+	if err := os.WriteFile(mdPath, []byte(mdContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	backend := &mockAIBackend{
+		responses: map[string]AIResponse{
+			"## Introduction": {Items: []AIResponseItem{
+				{Type: "claim", Content: "Transformers [1] have revolutionized NLP.", Section: "Introduction", Page: 1, Confidence: 0.9, Tags: []string{"transformer", "nlp"}},
+			}},
+			"## Methods": {Items: []AIResponseItem{
+				{Type: "method", Content: "We extend the self-attention layer described in [1] with sparse attention.", Section: "Methods", Page: 1, Confidence: 0.88, Tags: []string{"self-attention", "sparse-attention"}},
+			}},
+			"## Results": {Items: []AIResponseItem{
+				{Type: "result", Content: "Our method outperforms the baseline [3] by 5% on GLUE.", Section: "Results", Page: 1, Confidence: 0.95, Tags: []string{"benchmark", "glue"}},
+			}},
+		},
+	}
+
+	cfg := testConfig(filepath.Join(tmpDir, "papers"), filepath.Join(tmpDir, "knowledge"))
+
+	result, err := ExtractPaper(context.Background(), backend, "cite-paper", mdPath, cfg)
+	if err != nil {
+		t.Fatalf("ExtractPaper: %v", err)
+	}
+
+	// Verify bibliography was parsed (R3.2).
+	if len(result.Bibliography) != 3 {
+		t.Errorf("Bibliography: got %d entries, want 3", len(result.Bibliography))
+	} else {
+		if result.Bibliography[0].Key != "1" {
+			t.Errorf("Bibliography[0].Key = %q, want %q", result.Bibliography[0].Key, "1")
+		}
+		if result.Bibliography[0].Year != "2017" {
+			t.Errorf("Bibliography[0].Year = %q, want %q", result.Bibliography[0].Year, "2017")
+		}
+	}
+
+	// Verify citations on items (R3.1, R3.3, R3.4).
+	if len(result.Items) != 3 {
+		t.Fatalf("got %d items, want 3", len(result.Items))
+	}
+
+	// Item 0: "Transformers [1] have revolutionized NLP." → citation [1].
+	if len(result.Items[0].Citations) != 1 {
+		t.Errorf("Items[0].Citations: got %d, want 1", len(result.Items[0].Citations))
+	} else {
+		c := result.Items[0].Citations[0]
+		if c.Key != "1" {
+			t.Errorf("citation key = %q, want %q", c.Key, "1")
+		}
+		if c.BibIndex != 0 {
+			t.Errorf("citation BibIndex = %d, want 0", c.BibIndex)
+		}
+	}
+
+	// Item 2: "... baseline [3] ..." → citation [3] linked to bib index 2.
+	if len(result.Items[2].Citations) != 1 {
+		t.Errorf("Items[2].Citations: got %d, want 1", len(result.Items[2].Citations))
+	} else if result.Items[2].Citations[0].BibIndex != 2 {
+		t.Errorf("Items[2].Citations[0].BibIndex = %d, want 2", result.Items[2].Citations[0].BibIndex)
+	}
+
+	// Verify paper-level tags (R4.3).
+	if len(result.PaperTags) == 0 {
+		t.Error("PaperTags is empty, expected aggregated tags")
+	}
+	// Should contain all unique tags from items.
+	tagSet := make(map[string]bool)
+	for _, tag := range result.PaperTags {
+		tagSet[tag] = true
+	}
+	for _, want := range []string{"transformer", "nlp", "self-attention", "sparse-attention", "benchmark", "glue"} {
+		if !tagSet[want] {
+			t.Errorf("PaperTags missing %q", want)
+		}
+	}
+	// Tags should be sorted.
+	for i := 1; i < len(result.PaperTags); i++ {
+		if result.PaperTags[i] < result.PaperTags[i-1] {
+			t.Errorf("PaperTags not sorted: %v", result.PaperTags)
+			break
+		}
+	}
+}
+
+func TestExtractPaperNoBibliography(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdDir := filepath.Join(tmpDir, "papers", markdownDir)
+	if err := os.MkdirAll(mdDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	mdContent := `## Introduction
+
+A simple paper with no references section.
+`
+	mdPath := filepath.Join(mdDir, "no-bib.md")
+	if err := os.WriteFile(mdPath, []byte(mdContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	backend := &mockAIBackend{
+		responses: map[string]AIResponse{
+			"## Introduction": {Items: []AIResponseItem{
+				{Type: "claim", Content: "A simple paper.", Section: "Introduction", Page: 1, Confidence: 0.8, Tags: []string{"test"}},
+			}},
+		},
+	}
+
+	cfg := testConfig(filepath.Join(tmpDir, "papers"), filepath.Join(tmpDir, "knowledge"))
+	result, err := ExtractPaper(context.Background(), backend, "no-bib", mdPath, cfg)
+	if err != nil {
+		t.Fatalf("ExtractPaper: %v", err)
+	}
+
+	if len(result.Bibliography) != 0 {
+		t.Errorf("Bibliography: got %d entries, want 0", len(result.Bibliography))
+	}
+
+	// Items without citation markers should have no citations.
+	if len(result.Items[0].Citations) != 0 {
+		t.Errorf("Items[0].Citations: got %d, want 0", len(result.Items[0].Citations))
+	}
+
+	// Paper tags should still be aggregated from items.
+	if len(result.PaperTags) != 1 || result.PaperTags[0] != "test" {
+		t.Errorf("PaperTags = %v, want [test]", result.PaperTags)
+	}
+}
+
+func TestExtractPaperAuthorYearCitations(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdDir := filepath.Join(tmpDir, "papers", markdownDir)
+	if err := os.MkdirAll(mdDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	mdContent := `## Introduction
+
+As shown by [Smith et al., 2020], the approach works well.
+`
+	mdPath := filepath.Join(mdDir, "author-cite.md")
+	if err := os.WriteFile(mdPath, []byte(mdContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	backend := &mockAIBackend{
+		responses: map[string]AIResponse{
+			"## Introduction": {Items: []AIResponseItem{
+				{Type: "claim", Content: "As shown by [Smith et al., 2020], the approach works well.", Section: "Introduction", Page: 1, Confidence: 0.85, Tags: []string{"survey"}},
+			}},
+		},
+	}
+
+	cfg := testConfig(filepath.Join(tmpDir, "papers"), filepath.Join(tmpDir, "knowledge"))
+	result, err := ExtractPaper(context.Background(), backend, "author-cite", mdPath, cfg)
+	if err != nil {
+		t.Fatalf("ExtractPaper: %v", err)
+	}
+
+	if len(result.Items) != 1 {
+		t.Fatalf("got %d items, want 1", len(result.Items))
+	}
+
+	// Should find the author-year citation (unlinked since no numbered bib).
+	if len(result.Items[0].Citations) != 1 {
+		t.Errorf("Citations: got %d, want 1", len(result.Items[0].Citations))
+	} else {
+		c := result.Items[0].Citations[0]
+		if c.Key != "Smith et al., 2020" {
+			t.Errorf("citation key = %q, want %q", c.Key, "Smith et al., 2020")
+		}
+		if c.BibIndex != -1 {
+			t.Errorf("citation BibIndex = %d, want -1 (no matching bib entry)", c.BibIndex)
+		}
+	}
+}
