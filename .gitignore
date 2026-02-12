@@ -9,5 +9,9 @@
 # Build output
 bin/
 
+# Secrets (API keys, credentials)
+.secrets/*
+!.secrets/.gitkeep
+
 .beads/.jsonl.lock
 .beads/daemon-error
