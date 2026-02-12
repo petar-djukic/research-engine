@@ -1,6 +1,6 @@
 # Research Engine
 
-A personal research pipeline that takes academic papers from search through knowledge extraction to new paper generation. The system is a Go CLI that exposes each pipeline stage as a Cobra subcommand, designed to run locally on a single machine. The pipeline begins with search: the researcher describes a topic, and the system finds relevant papers across arXiv, Semantic Scholar, and other sources. Search results feed into acquisition, which downloads PDFs. From there, each stage transforms data into a more useful form: raw PDFs become structured text, structured text becomes extracted knowledge, and extracted knowledge feeds into new writing.
+A Claude-powered research tool for academic papers. Claude drives the research workflow through skills: searching for papers, reading them, querying a knowledge base, and writing new work with citations. A Go CLI provides the infrastructure: downloading PDFs, converting them to Markdown so Claude can read them, extracting typed knowledge items, and indexing them for retrieval.
 
 See [VISION.md](docs/VISION.md) for project goals and boundaries. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design and data flow.
 
@@ -8,7 +8,8 @@ See [VISION.md](docs/VISION.md) for project goals and boundaries. See [ARCHITECT
 
 - **Go 1.25+** — implementation language and build tool
 - **Container runtime** (Docker or Podman) — required for PDF conversion (markitdown backend)
-- **Claude API key** — required for extraction and generation stages (set `ANTHROPIC_API_KEY` environment variable)
+- **Claude API key** — required for extraction stage (set `ANTHROPIC_API_KEY` environment variable)
+- **Claude Code** — the researcher's interface to Claude skills
 
 ### Install Go
 
@@ -31,48 +32,94 @@ Make sure `$GOPATH/bin` (typically `~/go/bin`) is on your PATH. Add this to your
 export PATH="$PATH:$(go env GOPATH)/bin"
 ```
 
-### Container Runtime
+### Container Runtime (Podman)
 
-The conversion stage uses a container to run MarkItDown for PDF-to-Markdown conversion. Install Docker or Podman:
+The conversion stage runs MarkItDown inside a container for PDF-to-Markdown conversion. We recommend Podman; Docker also works.
+
+Install Podman:
 
 ```bash
-brew install --cask docker   # Docker Desktop
-# or
-brew install podman           # Podman
+brew install podman
+```
+
+Initialize and start a Podman machine (required on macOS, where containers run in a Linux VM):
+
+```bash
+podman machine init
+podman machine start
+```
+
+Verify Podman is working:
+
+```bash
+podman info
+```
+
+Build the markitdown container image:
+
+```bash
+podman build -t markitdown:latest containers/markitdown/
+```
+
+Verify the image exists:
+
+```bash
+podman image exists markitdown:latest && echo "OK"
+```
+
+If you prefer Docker instead, the same Dockerfile works:
+
+```bash
+docker build -t markitdown:latest containers/markitdown/
 ```
 
 The CLI auto-detects which runtime is available.
 
+### Podman Machine Management
+
+The Podman machine must be running for PDF conversion. It persists across reboots but stops when the machine is shut down.
+
+```bash
+podman machine start    # start the VM (required before convert)
+podman machine stop     # stop the VM when done
+podman machine list     # check machine status
+```
+
 ## Build
 
 ```bash
-go build -o research-engine ./cmd/research-engine/
+go build -tags sqlite_fts5 -o bin/research-engine ./cmd/research-engine/
 ```
 
-Or install directly:
+Or use Mage:
 
 ```bash
-go install ./cmd/research-engine/
+go run github.com/magefile/mage@latest build
 ```
 
-Verify:
+## Claude Skills
 
-```bash
-./research-engine version
-```
+The researcher's primary interface is through Claude Code skills. Each skill is a slash command that Claude executes.
 
-## Pipeline Stages
+| Skill | Command | Purpose |
+|-------|---------|---------|
+| Search | `/search-papers` | Search academic APIs, recommend papers to acquire |
+| Acquire | `/acquire-papers` | Download papers, convert to Markdown, optionally extract |
+| Read | `/read-papers` | Browse and read converted Markdown papers |
+| Query | `/query-knowledge` | Search the knowledge base, trace items to sources |
+| Write | `/write-paper` | Create paper projects, write sections with citations |
 
-The pipeline has six stages, each exposed as a Cobra subcommand. The first three are implemented; the rest are planned.
+## Infrastructure Commands
+
+The Go CLI provides infrastructure that Claude invokes through skills. Each stage is a Cobra subcommand.
 
 | Stage | Command | Status | PRD |
 |-------|---------|--------|-----|
 | Search | `research-engine search` | Implemented | [prd006-search](docs/specs/product-requirements/prd006-search.yaml) |
 | Acquisition | `research-engine acquire` | Implemented | [prd001-acquisition](docs/specs/product-requirements/prd001-acquisition.yaml) |
 | Conversion | `research-engine convert` | Implemented | [prd002-conversion](docs/specs/product-requirements/prd002-conversion.yaml) |
-| Extraction | `research-engine extract` | Planned | [prd003-extraction](docs/specs/product-requirements/prd003-extraction.yaml) |
-| Knowledge Base | `research-engine store` | Planned | [prd004-knowledge-base](docs/specs/product-requirements/prd004-knowledge-base.yaml) |
-| Generation | `research-engine generate` | Planned | [prd005-generation](docs/specs/product-requirements/prd005-generation.yaml) |
+| Extraction | `research-engine extract` | Implemented | [prd003-extraction](docs/specs/product-requirements/prd003-extraction.yaml) |
+| Knowledge Base | `research-engine knowledge` | Implemented | [prd004-knowledge-base](docs/specs/product-requirements/prd004-knowledge-base.yaml) |
 
 ### Search
 
@@ -123,7 +170,7 @@ Flags:
 
 ### Convert
 
-Convert transforms downloaded PDFs into structured Markdown.
+Convert transforms downloaded PDFs into structured Markdown. Requires a running container runtime with the `markitdown:latest` image.
 
 ```bash
 research-engine convert papers/raw/2301.07041.pdf
@@ -139,18 +186,42 @@ Flags:
 | `--papers-dir` | Base directory for papers (default "papers") |
 | `--batch` | Process all unconverted papers in papers-dir |
 
+### Extract
+
+Extract identifies typed knowledge items (claims, methods, definitions, results) from converted Markdown using the Claude API.
+
+```bash
+research-engine extract --batch --model claude-sonnet-4-5-20250929 --api-key $ANTHROPIC_API_KEY
+research-engine extract 2301.07041 --model claude-sonnet-4-5-20250929 --api-key $ANTHROPIC_API_KEY
+```
+
+### Knowledge Base
+
+Store, retrieve, and export knowledge items.
+
+```bash
+research-engine knowledge store                          # ingest extracted items
+research-engine knowledge retrieve "attention mechanism"  # full-text search
+research-engine knowledge retrieve --type method --json   # filter by type
+research-engine knowledge retrieve --trace ITEM_ID        # trace to source
+research-engine knowledge export --format yaml            # export to YAML
+```
+
 ## Project Structure
 
 ```text
 research-engine/
+  .claude/commands/       Claude research skills (search, acquire, read, query, write)
   cmd/research-engine/    CLI entry point and Cobra subcommands
   internal/               Private implementation (one package per pipeline stage)
   pkg/types/              Shared data structures (Paper, SearchResult, KnowledgeItem)
+  containers/markitdown/  Dockerfile for the markitdown conversion image
   magefiles/              Build automation and developer tooling
+  scripts/                Helper scripts
   docs/                   VISION, ARCHITECTURE, PRDs, use cases
   papers/                 Working directory for acquired papers (per-project)
   knowledge/              Working directory for knowledge base (per-project)
-  output/                 Working directory for generated drafts (per-project)
+  output/papers/          Paper projects written by Claude
 ```
 
 ## Development
@@ -158,12 +229,14 @@ research-engine/
 Run tests:
 
 ```bash
-go test ./...
+go test -tags sqlite_fts5 ./...
 ```
 
 Build automation (requires [Mage](https://magefile.org)):
 
 ```bash
-go run github.com/magefile/mage@latest -l   # list available targets
-go run github.com/magefile/mage@latest stats # project statistics
+go run github.com/magefile/mage@latest -l       # list available targets
+go run github.com/magefile/mage@latest build     # compile CLI
+go run github.com/magefile/mage@latest stats     # project statistics
+go run github.com/magefile/mage@latest compile output/papers/my-survey  # PDF from paper project
 ```
