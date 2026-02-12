@@ -28,7 +28,7 @@ releases:
         status: spec_complete
       - id: rel02.0-uc002-knowledge-base-storage
         summary: Store extracted items in SQLite and retrieve them by full-text or structured queries
-        status: not_started
+        status: spec_complete
 
   - version: "03.0"
     name: Generation

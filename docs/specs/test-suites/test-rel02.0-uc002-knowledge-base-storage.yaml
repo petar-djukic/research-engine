@@ -1,0 +1,455 @@
+id: test-rel02.0-uc002-knowledge-base-storage
+title: Knowledge Base Storage and Retrieval
+description: >
+  Validates that the knowledge base stage ingests extracted KnowledgeItems
+  into a SQLite database with FTS5 indexing, supports full-text search,
+  structured queries, combined queries, provenance tracing, incremental
+  updates, and export to YAML and JSON. Covers schema creation, ingestion,
+  all query modes, trace, skip/update logic, and export.
+traces:
+  - rel02.0-uc002-knowledge-base-storage
+  - prd004-knowledge-base
+tags:
+  - cli
+  - knowledge-base
+  - smoke
+
+preconditions:
+  - The knowledge/extracted/ directory contains at least one valid extraction YAML file
+  - Each extraction file contains a list of KnowledgeItems with all required fields
+  - The papers/metadata/ directory contains corresponding Paper YAML records
+  - The papers/markdown/ directory contains corresponding structured Markdown files (for trace tests)
+
+test_cases:
+  - name: Store creates database and schema when none exists
+    inputs:
+      command: research-engine knowledge store
+      precondition: knowledge/index/research.db does not exist
+      files:
+        knowledge/extracted/2301.07041-items.yaml: |
+          paper_id: 2301.07041
+          items:
+            - item_id: 2301.07041-s1-a1b2c3
+              type: claim
+              content: "Efficient attention reduces computation from O(n^2) to O(n log n)"
+              paper_id: 2301.07041
+              section: "Method"
+              page: 2
+              confidence: 0.92
+              tags:
+                - attention
+                - efficiency
+              citations:
+                - "[1]"
+        papers/metadata/2301.07041.yaml: |
+          id: 2301.07041
+          title: "Efficient Attention Mechanisms"
+          authors: ["Smith, J.", "Doe, A."]
+          source_url: https://arxiv.org/pdf/2301.07041
+    expected:
+      exit_code: 0
+      files:
+        knowledge/index/research.db:
+          exists: true
+      state:
+        tables_exist:
+          - items
+          - papers
+          - items_fts
+
+  - name: Store ingests all KnowledgeItem fields
+    inputs:
+      command: research-engine knowledge store
+      files:
+        knowledge/extracted/2301.07041-items.yaml: |
+          paper_id: 2301.07041
+          items:
+            - item_id: 2301.07041-s1-a1b2c3
+              type: method
+              content: "We define efficient attention as a linear approximation"
+              paper_id: 2301.07041
+              section: "Method"
+              page: 2
+              confidence: 0.95
+              tags:
+                - attention
+                - linear-approximation
+              citations:
+                - "[1]"
+    expected:
+      exit_code: 0
+      stdout_contains: "indexing"
+      state:
+        item_fields_stored:
+          - item_id
+          - type
+          - content
+          - paper_id
+          - section
+          - page
+          - confidence
+          - tags
+          - citations
+
+  - name: Store populates papers table with metadata
+    inputs:
+      command: research-engine knowledge store
+      files:
+        knowledge/extracted/2301.07041-items.yaml: |
+          paper_id: 2301.07041
+          items:
+            - item_id: 2301.07041-s1-a1b2c3
+              type: claim
+              content: "A claim"
+              paper_id: 2301.07041
+              section: "Abstract"
+              page: 1
+              confidence: 0.9
+              tags: []
+              citations: []
+        papers/metadata/2301.07041.yaml: |
+          id: 2301.07041
+          title: "Efficient Attention Mechanisms"
+          authors: ["Smith, J.", "Doe, A."]
+          source_url: https://arxiv.org/pdf/2301.07041
+    expected:
+      exit_code: 0
+      state:
+        papers_table_has:
+          paper_id: 2301.07041
+          title: "Efficient Attention Mechanisms"
+
+  - name: Full-text search returns relevant items ranked by relevance
+    inputs:
+      command: research-engine knowledge query "attention mechanism"
+      precondition: knowledge base contains items from multiple papers including items about attention
+    expected:
+      exit_code: 0
+      stdout_contains: "attention"
+      state:
+        results_ranked: true
+        results_contain_provenance: true
+
+  - name: Full-text search respects result limit
+    inputs:
+      command: research-engine knowledge query "machine learning" --limit 5
+      precondition: knowledge base contains more than 5 items matching the query
+    expected:
+      exit_code: 0
+      state:
+        result_count_max: 5
+
+  - name: Full-text search result includes Paper metadata
+    inputs:
+      command: research-engine knowledge query "efficient attention"
+      precondition: knowledge base contains items from paper 2301.07041
+    expected:
+      exit_code: 0
+      state:
+        each_result_has:
+          - paper_id
+          - section
+          - page
+          - paper_title
+          - paper_authors
+
+  - name: Structured query by type returns only matching type
+    inputs:
+      command: research-engine knowledge query --type method
+      precondition: knowledge base contains items of types claim, method, definition, result
+    expected:
+      exit_code: 0
+      state:
+        all_results_type: method
+
+  - name: Structured query by tag returns tagged items
+    inputs:
+      command: research-engine knowledge query --tag transformer
+      precondition: knowledge base contains items with various tags including transformer
+    expected:
+      exit_code: 0
+      state:
+        all_results_have_tag: transformer
+
+  - name: Structured query by paper_id returns items from that paper
+    inputs:
+      command: research-engine knowledge query --paper 2301.07041
+      precondition: knowledge base contains items from multiple papers
+    expected:
+      exit_code: 0
+      state:
+        all_results_paper_id: 2301.07041
+
+  - name: Combined query with type and tag and full-text
+    inputs:
+      command: research-engine knowledge query "efficiency" --type claim --tag attention
+      precondition: >
+        knowledge base contains claims and methods; some tagged with attention,
+        some not; some mentioning efficiency, some not
+    expected:
+      exit_code: 0
+      state:
+        all_results_type: claim
+        all_results_have_tag: attention
+        all_results_contain: "efficiency"
+
+  - name: Structured query results sorted by paper and section order
+    inputs:
+      command: research-engine knowledge query --type claim
+      precondition: knowledge base contains claims from multiple papers and sections
+    expected:
+      exit_code: 0
+      state:
+        results_sorted_by:
+          - paper_id
+          - section
+
+  - name: Trace operation returns source context from Markdown
+    inputs:
+      command: research-engine knowledge trace 2301.07041-s1-a1b2c3
+      precondition: >
+        knowledge base contains item 2301.07041-s1-a1b2c3 with paper_id 2301.07041
+        and page 2
+      files:
+        papers/markdown/2301.07041.md: |
+          ---
+          id: 2301.07041
+          source_pdf: papers/raw/2301.07041.pdf
+          converted_at: 2026-01-15T10:00:00Z
+          ---
+          ## Abstract
+          <!-- page 1 -->
+          We propose a new attention mechanism.
+
+          ## Method
+          <!-- page 2 -->
+          We define efficient attention as a linear approximation of softmax attention.
+          Our approach reduces computation from O(n^2) to O(n log n).
+
+          ## Results
+          <!-- page 3 -->
+          On the GLUE benchmark, our method achieves 89.2% accuracy.
+    expected:
+      exit_code: 0
+      stdout_contains: "efficient attention"
+      state:
+        context_from_section: "Method"
+
+  - name: Trace fails with descriptive error when Markdown is missing
+    inputs:
+      command: research-engine knowledge trace 2301.07041-s1-a1b2c3
+      precondition: >
+        knowledge base contains the item but papers/markdown/2301.07041.md
+        does not exist on disk
+    expected:
+      exit_code: 1
+      stderr_contains: "papers/markdown/2301.07041.md"
+
+  - name: Incremental update skips unchanged papers
+    inputs:
+      command: research-engine knowledge store
+      precondition: >
+        knowledge base already contains items from 2301.07041;
+        knowledge/extracted/2301.07041-items.yaml has not been modified
+        since the last indexing timestamp
+    expected:
+      exit_code: 0
+      stdout_contains: "skipped"
+      state:
+        items_unchanged: true
+
+  - name: Incremental update replaces items for changed paper
+    inputs:
+      command: research-engine knowledge store
+      precondition: >
+        knowledge base contains items from 2301.07041;
+        knowledge/extracted/2301.07041-items.yaml has a newer modification
+        time than the last indexing timestamp
+    expected:
+      exit_code: 0
+      stdout_contains: "updated"
+      state:
+        old_items_removed: true
+        new_items_inserted: true
+
+  - name: Incremental update indexes new papers
+    inputs:
+      command: research-engine knowledge store
+      files:
+        knowledge/extracted/new-paper-items.yaml: |
+          paper_id: new-paper
+          items:
+            - item_id: new-paper-s1-x1y2z3
+              type: definition
+              content: "A definition from a new paper"
+              paper_id: new-paper
+              section: "Introduction"
+              page: 1
+              confidence: 0.88
+              tags:
+                - new-topic
+              citations: []
+        papers/metadata/new-paper.yaml: |
+          id: new-paper
+          title: "A New Paper"
+          authors: ["Author, N."]
+      precondition: knowledge base does not contain items from new-paper
+    expected:
+      exit_code: 0
+      stdout_contains: "indexing"
+      state:
+        paper_indexed: new-paper
+
+  - name: Store does not re-index unchanged papers
+    inputs:
+      command: research-engine knowledge store
+      precondition: >
+        knowledge base contains items from 3 papers; none of the extraction
+        files have been modified since last indexing
+    expected:
+      exit_code: 0
+      stdout_contains: "skipped: 3"
+      state:
+        no_items_rewritten: true
+
+  - name: Store reports per-paper status and summary
+    inputs:
+      command: research-engine knowledge store
+      precondition: >
+        knowledge/extracted/ contains 3 papers: one new, one changed, one unchanged
+    expected:
+      exit_code: 0
+      stdout_contains: "indexed: 1"
+      stdout_contains_also: "updated: 1"
+      state:
+        summary_includes:
+          - indexed
+          - skipped
+          - updated
+          - failed
+
+  - name: Export produces valid YAML file
+    inputs:
+      command: research-engine knowledge export --format yaml
+      precondition: knowledge base contains items from at least one paper
+    expected:
+      exit_code: 0
+      files:
+        knowledge/index/export.yaml:
+          exists: true
+          valid_yaml: true
+          contains_items: true
+          contains_paper_metadata: true
+
+  - name: Export produces valid JSON file
+    inputs:
+      command: research-engine knowledge export --format json
+      precondition: knowledge base contains items from at least one paper
+    expected:
+      exit_code: 0
+      files:
+        knowledge/index/export.json:
+          exists: true
+          valid_json: true
+          contains_items: true
+          contains_paper_metadata: true
+
+  - name: Filtered export by type
+    inputs:
+      command: research-engine knowledge export --format yaml --type method
+      precondition: knowledge base contains items of multiple types
+    expected:
+      exit_code: 0
+      files:
+        knowledge/index/export.yaml:
+          exists: true
+          all_items_type: method
+
+  - name: Filtered export by tag
+    inputs:
+      command: research-engine knowledge export --format json --tag attention
+      precondition: knowledge base contains items with various tags
+    expected:
+      exit_code: 0
+      files:
+        knowledge/index/export.json:
+          exists: true
+          all_items_have_tag: attention
+
+  - name: Store creates directories when they do not exist
+    inputs:
+      command: research-engine knowledge store
+      precondition: knowledge/index/ directory does not exist
+      files:
+        knowledge/extracted/2301.07041-items.yaml: |
+          paper_id: 2301.07041
+          items:
+            - item_id: 2301.07041-s1-a1b2c3
+              type: claim
+              content: "A claim"
+              paper_id: 2301.07041
+              section: "Abstract"
+              page: 1
+              confidence: 0.9
+              tags: []
+              citations: []
+        papers/metadata/2301.07041.yaml: |
+          id: 2301.07041
+          title: "Test Paper"
+          authors: ["Author"]
+    expected:
+      exit_code: 0
+      files:
+        knowledge/index/research.db:
+          exists: true
+
+  - name: Store writes export.yaml on successful ingestion
+    inputs:
+      command: research-engine knowledge store
+      files:
+        knowledge/extracted/2301.07041-items.yaml: |
+          paper_id: 2301.07041
+          items:
+            - item_id: 2301.07041-s1-a1b2c3
+              type: claim
+              content: "A claim about attention"
+              paper_id: 2301.07041
+              section: "Abstract"
+              page: 1
+              confidence: 0.9
+              tags:
+                - attention
+              citations: []
+        papers/metadata/2301.07041.yaml: |
+          id: 2301.07041
+          title: "Attention Paper"
+          authors: ["Smith"]
+    expected:
+      exit_code: 0
+      files:
+        knowledge/index/export.yaml:
+          exists: true
+          valid_yaml: true
+
+  - name: Empty query returns error
+    inputs:
+      command: research-engine knowledge query
+      precondition: no query text and no filters provided
+    expected:
+      exit_code: 1
+      stderr_contains: "query or filter required"
+
+  - name: Query with no results returns empty output
+    inputs:
+      command: research-engine knowledge query "nonexistent topic xyz123"
+      precondition: knowledge base contains items but none matching the query
+    expected:
+      exit_code: 0
+      state:
+        result_count: 0
+
+cleanup:
+  - Remove knowledge/index/ directory (database and export files)
+  - Remove test extraction files from knowledge/extracted/
+  - Remove test Paper metadata from papers/metadata/
+  - Remove test Markdown files from papers/markdown/

@@ -1,0 +1,108 @@
+id: rel02.0-uc002-knowledge-base-storage
+title: Knowledge Base Storage and Retrieval
+summary: |
+  A researcher who has extracted knowledge items from papers runs the store
+  command to ingest them into a SQLite-backed knowledge base. The system reads
+  YAML extraction files, creates or updates a SQLite database with FTS5 indexing,
+  and persists all KnowledgeItems with their provenance. The researcher then
+  queries the knowledge base by full-text search, structured filters, or a
+  combination of both. Each result traces back to its source paper and section.
+  The researcher can export the knowledge base to YAML or JSON for sharing or
+  version control.
+
+actor: Researcher who has extracted knowledge items from converted papers
+trigger: Researcher runs research-engine knowledge store or research-engine knowledge query
+
+flow:
+  - F1: "Ingest extraction files: scan knowledge/extracted/ for YAML files and parse each into a list of KnowledgeItems with Paper metadata"
+  - F2: "Initialize database: create SQLite database at knowledge/index/research.db if it does not exist; create items table, papers table, and FTS5 virtual table"
+  - F3: "Create papers table: insert or update Paper metadata so queries can join items to paper-level information"
+  - F4: "Index items: insert each KnowledgeItem into the items table with all fields (type, content, paper_id, section, page, confidence, tags, citations, item_id); populate the FTS5 index on the content field"
+  - F5: "Detect incremental changes: compare extraction file modification times against the last indexing timestamp; skip unchanged papers, remove and re-insert items for changed papers, insert items for new papers"
+  - F6: "Report ingestion status: print indexing/skipped/updated/failed status for each paper; print summary (count of indexed, skipped, updated, failed)"
+  - F7: "Full-text search: accept a text query, search the FTS5 index, and return KnowledgeItems ranked by relevance with Paper metadata"
+  - F8: "Structured query: accept filters (type, tag, paper_id) and return matching KnowledgeItems sorted by paper and section order"
+  - F9: "Combined query: accept both a text query and structured filters, intersect the results, and return items matching all criteria"
+  - F10: "Trace to source: given an item, read the corresponding Markdown file from papers/markdown/ and return the surrounding context (paragraph containing the item's source passage)"
+  - F11: "Export: dump the knowledge base to knowledge/index/export.yaml and knowledge/index/export.json with all KnowledgeItem fields and Paper metadata"
+  - F12: "Filtered export: accept the same filter criteria as retrieve and export only matching items"
+
+touchpoints:
+  - T1: "Knowledge Base component: Store operation (prd004-knowledge-base R1)"
+  - T2: "SQLite with FTS5: database schema, full-text index (prd004-knowledge-base R1.2, R2.1)"
+  - T3: "Full-text search: FTS5 ranked retrieval (prd004-knowledge-base R2)"
+  - T4: "Structured queries: type, tag, paper_id filters (prd004-knowledge-base R3)"
+  - T5: "Provenance and tracing: paper_id, section, page fields and trace operation (prd004-knowledge-base R4)"
+  - T6: "Incremental updates: modification time comparison, skip/replace logic (prd004-knowledge-base R5)"
+  - T7: "Export: YAML and JSON output (prd004-knowledge-base R6)"
+  - T8: "File system: knowledge/extracted/ (input), knowledge/index/ (database and exports), papers/markdown/ (trace source)"
+
+success_criteria:
+  - S1: Store creates SQLite database with items table, papers table, and FTS5 virtual table when the database does not exist
+  - S2: Store ingests KnowledgeItems from extraction YAML files with all fields preserved
+  - S3: Full-text search returns relevant KnowledgeItems ranked by FTS5 relevance score
+  - S4: Structured query by type returns only items of the specified type
+  - S5: Structured query by tag returns items tagged with the specified tag
+  - S6: Combined query (type + tag + full-text) returns correctly filtered and ranked results
+  - S7: Every retrieved item includes paper_id, section, and page provenance fields along with Paper metadata
+  - S8: Trace operation returns the surrounding context paragraph from the source Markdown
+  - S9: Incremental update skips papers whose extraction files have not changed
+  - S10: Incremental update removes old items and inserts new ones for papers whose extraction files have changed
+  - S11: Export produces valid YAML at knowledge/index/export.yaml
+  - S12: Export produces valid JSON at knowledge/index/export.json
+  - S13: Store creates the knowledge/index/ directory and database file when they do not exist
+  - S14: Ingestion reports per-paper status and a summary of indexed, skipped, updated, and failed counts
+
+out_of_scope:
+  - Semantic or vector-based search (FTS5 full-text search is sufficient for this phase)
+  - Deduplication of knowledge items across papers
+  - Real-time sync or live database updates
+  - Web UI for browsing the knowledge base
+  - Distributed or networked storage
+
+test_suite: test-rel02.0-uc002-knowledge-base-storage
+
+dependencies:
+  - D1: prd004-knowledge-base (storage, retrieval, export requirements)
+  - D2: prd003-extraction (KnowledgeItem schema and extraction output format)
+  - D3: rel02.0-uc001-knowledge-extraction (extraction YAML files must exist as input)
+
+risks:
+  - K1: "FTS5 ranking may not produce intuitive relevance for academic queries | Tune FTS5 rank function; accept FTS5 defaults as baseline and improve later"
+  - K2: "Large knowledge bases slow down queries | Add indexes on type, paper_id, and tags columns; paginate results with default limit of 20"
+  - K3: "Extraction YAML format changes between versions | Validate schema on ingestion and report errors for malformed files"
+  - K4: "Source Markdown files may be missing when trace is invoked | Return a descriptive error with the expected file path when the Markdown file is not found"
+
+demo: |
+  # Ingest extracted items into the knowledge base
+  research-engine knowledge store
+  # Output:
+  # indexing: 2301.07041
+  # indexing: 2305.14201
+  # skipped: 2302.00001
+  # indexed: 2, skipped: 1, updated: 0, failed: 0
+
+  # Full-text search
+  research-engine knowledge query "attention mechanism efficiency"
+  # Output: ranked list of KnowledgeItems with provenance
+
+  # Structured query by type
+  research-engine knowledge query --type method
+  # Output: all method items sorted by paper and section
+
+  # Combined query
+  research-engine knowledge query "transformer" --type claim --tag attention
+  # Output: claims about transformers tagged with attention
+
+  # Trace an item to its source
+  research-engine knowledge trace <item-id>
+  # Output: surrounding paragraph from the source Markdown
+
+  # Export
+  research-engine knowledge export --format yaml
+  research-engine knowledge export --format json
+
+references:
+  - prd004-knowledge-base
+  - prd003-extraction
+  - docs/ARCHITECTURE.md
