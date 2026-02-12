@@ -132,9 +132,14 @@ func deduplicate(results []types.SearchResult) ([]types.SearchResult, int) {
 			continue
 		}
 
-		// Also check by normalized title.
-		titleKey := "title:" + normalizeTitle(r.Title)
-		if titleKey != "title:" {
+		// Also check by normalized title. Use a type prefix so patents
+		// and academic papers are not cross-deduplicated.
+		typePrefix := "paper:"
+		if isPatentResult(r) {
+			typePrefix = "patent:"
+		}
+		titleKey := typePrefix + "title:" + normalizeTitle(r.Title)
+		if titleKey != typePrefix+"title:" {
 			if idx, ok := seen[titleKey]; ok {
 				mergeInto(&deduped[idx], r)
 				removed++
@@ -147,7 +152,7 @@ func deduplicate(results []types.SearchResult) ([]types.SearchResult, int) {
 		if key != "" {
 			seen[key] = idx
 		}
-		if titleKey != "title:" {
+		if titleKey != typePrefix+"title:" {
 			seen[titleKey] = idx
 		}
 	}
@@ -155,12 +160,35 @@ func deduplicate(results []types.SearchResult) ([]types.SearchResult, int) {
 }
 
 // dedupKey returns a key for identifier-based dedup. It prefers the
-// Identifier field (arXiv ID or DOI set by backends).
+// Identifier field (arXiv ID or DOI set by backends). Patent identifiers
+// are normalized by stripping kind codes so US7654321B2 and US7654321
+// produce the same key. Patent keys use a "patent:" prefix to prevent
+// cross-type matching with academic papers.
 func dedupKey(r types.SearchResult) string {
-	if r.Identifier != "" {
-		return "id:" + r.Identifier
+	if r.Identifier == "" {
+		return ""
 	}
-	return ""
+	if isPatentResult(r) {
+		return "patent:" + stripKindCode(r.Identifier)
+	}
+	return "id:" + r.Identifier
+}
+
+// stripKindCode removes the trailing kind code from a US patent identifier.
+// US7654321B2 → US7654321, US20230012345A1 → US20230012345.
+func stripKindCode(id string) string {
+	if !strings.HasPrefix(id, "US") {
+		return id
+	}
+	// Find where digits end after "US" prefix.
+	i := 2
+	for i < len(id) && id[i] >= '0' && id[i] <= '9' {
+		i++
+	}
+	if i > 2 {
+		return id[:i]
+	}
+	return id
 }
 
 // mergeInto fills empty fields of dst from src and keeps the higher score (R3.2).
