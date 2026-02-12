@@ -37,6 +37,14 @@ type SearchConfig struct {
 	// OpenAlexEmail is sent as mailto parameter for polite pool access.
 	OpenAlexEmail string `json:"openalex_email,omitempty" yaml:"openalex_email,omitempty"`
 
+	// EnablePatentsView controls whether the PatentsView backend is used.
+	// Per prd008-patent-search R1.5.
+	EnablePatentsView bool `json:"enable_patentsview" yaml:"enable_patentsview"`
+
+	// PatentsViewAPIKey is the API key for the PatentsView API.
+	// Per prd008-patent-search R1.3, R1.4.
+	PatentsViewAPIKey string `json:"patentsview_api_key,omitempty" yaml:"patentsview_api_key,omitempty"`
+
 	// InterBackendDelay is the delay between API calls to different backends (default 1s).
 	InterBackendDelay time.Duration `json:"inter_backend_delay" yaml:"inter_backend_delay"`
 
