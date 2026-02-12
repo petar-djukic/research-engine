@@ -6,7 +6,7 @@ A Claude-powered research tool for academic papers. This tool is designed to be 
 
 The researcher works inside Claude Code, using slash commands like `/search-papers` and `/read-papers` to interact with the system. Claude reads papers, builds understanding, and writes cited prose. The Go CLI runs behind the scenes, invoked by Claude as needed.
 
-See [VISION.md](docs/VISION.md) for project goals and boundaries. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design and data flow. See [eng01-claude-research-skills](docs/engineering/eng01-claude-research-skills.md) for skill design philosophy and conventions.
+See [VISION.md](docs/VISION.md) for project goals and boundaries. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design and data flow. See [eng01-claude-research-skills](docs/engineering/eng01-claude-research-skills.md) for skill design philosophy and conventions. See [eng02-patent-search](docs/engineering/eng02-patent-search.md) for patent search setup and usage. See [eng03-sample-prompts](docs/engineering/eng03-sample-prompts.md) for example research sessions.
 
 ## Prerequisites
 
@@ -14,6 +14,7 @@ See [VISION.md](docs/VISION.md) for project goals and boundaries. See [ARCHITECT
 - **Container runtime** (Docker or Podman) — required for PDF conversion (markitdown backend)
 - **Claude API key** — required for extraction stage (set `ANTHROPIC_API_KEY` environment variable)
 - **Claude Code** — the researcher's interface to Claude skills
+- **PatentsView API key** (optional) — required for patent search. See [eng02-patent-search](docs/engineering/eng02-patent-search.md) for setup instructions. Store the key in `.secrets/patentsview-api-key`.
 
 ### Install Go
 
@@ -165,7 +166,7 @@ The Go CLI provides infrastructure that Claude invokes through skills. Each stag
 
 ### Search
 
-Search queries arXiv, Semantic Scholar, and OpenAlex for papers matching a research question.
+Search queries arXiv, Semantic Scholar, OpenAlex, and PatentsView for papers and patents matching a research question.
 
 ```bash
 research-engine search "transformer attention mechanisms"
@@ -174,6 +175,7 @@ research-engine search --keywords "LLM,reasoning" --from 2025-01-01 --json
 research-engine search --query "diffusion models" --query-file results.yaml
 research-engine search --query-file results.yaml   # reload saved results
 research-engine search --query "attention" --csl    # CSL YAML output
+research-engine search "neural network" --patents   # patent-only search
 ```
 
 Flags:
@@ -181,7 +183,7 @@ Flags:
 | Flag | Description |
 |------|-------------|
 | `--query` | Free-text research question |
-| `--author` | Filter by author name |
+| `--author` | Filter by author name (or inventor last name for patents) |
 | `--keywords` | Filter by keywords (comma-separated) |
 | `--from` | Publication date range start (YYYY-MM-DD) |
 | `--to` | Publication date range end (YYYY-MM-DD) |
@@ -190,17 +192,24 @@ Flags:
 | `--csl` | Output results as CSL YAML for reference managers |
 | `--recency-bias` | Boost recently published papers |
 | `--query-file` | YAML file to save/load query and results |
+| `--patents` | Search only PatentsView (disables academic backends) |
+| `--patentsview-api-key` | PatentsView API key (or use `.secrets/patentsview-api-key`) |
+
+When the PatentsView API key is configured, patent results appear alongside academic results automatically. Use `--patents` for patent-only searches.
 
 ### Acquire
 
-Acquire downloads papers from arXiv IDs, DOIs, or direct PDF URLs.
+Acquire downloads papers and patents from arXiv IDs, DOIs, US patent numbers, or direct PDF URLs.
 
 ```bash
 research-engine acquire 2301.07041
 research-engine acquire "10.1038/s41586-021-03819-2"
 research-engine acquire https://example.com/paper.pdf
-research-engine acquire 2301.07041 2305.14314 --timeout 2m --delay 2s
+research-engine acquire US7654321 US20230012345A1
+research-engine acquire 2301.07041 US11734097 --timeout 2m --delay 2s
 ```
+
+Patent identifiers (US prefix followed by digits, with optional kind code) are auto-detected.
 
 Flags:
 
@@ -254,13 +263,14 @@ research-engine knowledge export --format yaml            # export to YAML
 ```text
 research-engine/
   .claude/commands/       Claude research skills (search, acquire, read, query, write)
+  .secrets/               API keys loaded at runtime (not committed to git)
   cmd/research-engine/    CLI entry point and Cobra subcommands
   internal/               Private implementation (one package per pipeline stage)
   pkg/types/              Shared data structures (Paper, SearchResult, KnowledgeItem)
   containers/markitdown/  Dockerfile for the markitdown conversion image
   magefiles/              Build automation and developer tooling
   scripts/                Helper scripts
-  docs/                   VISION, ARCHITECTURE, PRDs, use cases
+  docs/                   VISION, ARCHITECTURE, PRDs, engineering guides
   papers/                 Working directory for acquired papers (per-project)
   knowledge/              Working directory for knowledge base (per-project)
   output/papers/          Paper projects written by Claude
