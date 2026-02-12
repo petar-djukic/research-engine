@@ -1,5 +1,6 @@
 id: prd005-generation
 title: Paper Generation
+superseded_by: prd007-paper-writing
 problem: |
   A researcher has built a knowledge base from dozens of papers. The knowledge
   base contains hundreds of typed items: claims, methods, definitions, and

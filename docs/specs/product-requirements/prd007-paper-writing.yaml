@@ -1,0 +1,92 @@
+id: prd007-paper-writing
+title: Claude-Driven Paper Writing
+supersedes: prd005-generation
+problem: |
+  A researcher has built a knowledge base from dozens of papers. The knowledge
+  base contains hundreds of typed items: claims, methods, definitions, and
+  results, each traceable to a specific source. When the researcher sits down
+  to write a literature review, survey, or original paper, they face a manual
+  synthesis task: formulating structure, retrieving relevant knowledge,
+  composing prose, and inserting citations.
+
+  The original approach (prd005-generation) had a Go tool call the Claude API
+  to generate draft sections. This underutilizes Claude. Claude can read papers
+  directly, understand context across sources, reason about structure, and
+  write iteratively with researcher guidance. We replace the Go generation
+  stage with a Claude skill that creates structured paper projects and writes
+  content grounded in the knowledge base and source papers.
+
+goals:
+  - G1: Define a structured paper project layout with numbered section files and metadata
+  - G2: Define the outline-to-section workflow for iterative paper writing
+  - G3: Define citation and reference tracking conventions
+  - G4: Enable iterative refinement where the researcher and Claude develop sections together
+
+requirements:
+  R1:
+    title: Paper Project Structure
+    items:
+      - R1.1: A paper project must live in a directory under output/papers/ named with a URL-safe slug derived from the title
+      - R1.2: The project directory must contain numbered Markdown files for each section, named NN-section-name.md where NN is a two-digit sequence number
+      - R1.3: The project directory must contain 00-title-page.md with YAML frontmatter and no body content
+      - R1.4: The project directory must contain outline.yaml tracking the outline structure and per-section status
+      - R1.5: The project directory must contain references.yaml listing all cited papers with metadata
+      - R1.6: The write-paper skill must create the project directory and all initial files
+
+  R2:
+    title: Title Page Frontmatter
+    items:
+      - R2.1: "00-title-page.md must contain YAML frontmatter with these fields: title (string), authors (list of name and affiliation), date (YYYY-MM-DD), type (string: survey, literature-review, original-research, position-paper), abstract (string, initially empty), keywords (list of strings)"
+      - R2.2: The frontmatter must be valid YAML parseable by standard tools
+      - R2.3: The abstract field must be updated as the paper takes shape
+
+  R3:
+    title: Section Files
+    items:
+      - R3.1: Each section file must be a standalone Markdown file with a top-level heading matching the section title
+      - R3.2: Section files must use inline citations in square-bracket format linking to citation keys defined in references.yaml (e.g. [Vaswani2017])
+      - R3.3: When first created, each section file must contain the section heading, a brief description of what the section will cover, and placeholder subsection headings
+      - R3.4: Section numbering must be sequential starting from 01 (00 is reserved for the title page)
+      - R3.5: Section file names must use lowercase hyphenated slugs after the number prefix (e.g. 03-attention-mechanisms.md)
+
+  R4:
+    title: Outline Tracking
+    items:
+      - R4.1: "outline.yaml must contain a sections list where each entry has: number (string, two-digit), title (string), file (string, filename), description (string, what the section covers), status (string: outline, draft, revised, final)"
+      - R4.2: The write-paper skill must update outline.yaml when sections are created or their status changes
+      - R4.3: outline.yaml must be the source of truth for the paper structure
+
+  R5:
+    title: Reference Tracking
+    items:
+      - R5.1: "references.yaml must contain a papers list where each entry has: citation_key (string, e.g. Vaswani2017), paper_id (string, the acquisition slug), title (string), authors (list of strings), year (integer), venue (string, optional)"
+      - R5.2: The write-paper skill must add entries to references.yaml when citing a paper for the first time
+      - R5.3: Citation keys must be unique within the paper project
+      - R5.4: Citation keys should follow AuthorYear format (first author surname + publication year)
+
+  R6:
+    title: Citation Format
+    items:
+      - R6.1: Inline citations must use square brackets with the citation key (e.g. [Vaswani2017])
+      - R6.2: Multiple citations in the same bracket must be separated by semicolons (e.g. [Vaswani2017; Brown2020])
+      - R6.3: Every citation key used in section files must have a corresponding entry in references.yaml
+      - R6.4: The Mage compile target must be able to resolve citation keys to bibliography entries when producing PDF output
+
+non_goals:
+  - We do not produce publication-ready papers; the output is a first draft that the researcher refines
+  - We do not format for specific journal or conference templates; the researcher applies formatting after editing
+  - We do not generate figures, tables, or diagrams; the draft is text with citations
+  - We do not perform autonomous multi-round revision; the researcher drives each refinement cycle
+  - We do not compile to PDF or LaTeX within the skill; compilation is a separate Mage target
+
+acceptance_criteria:
+  - The write-paper skill creates a project directory with 00-title-page.md, outline.yaml, and references.yaml
+  - Section files are numbered sequentially and contain initial descriptions
+  - Every inline citation has a matching entry in references.yaml
+  - outline.yaml accurately reflects the current paper structure and per-section status
+  - The researcher can ask Claude to write, revise, or expand any section iteratively
+  - Section content draws on knowledge base items and source paper Markdown with provenance
+
+references:
+  - prd004-knowledge-base
+  - prd005-generation

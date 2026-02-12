@@ -18,7 +18,7 @@ releases:
 
   - version: "02.0"
     name: Knowledge
-    status: not_started
+    status: done
     focus: |
       Extraction and knowledge base stages. Structured Markdown becomes typed
       knowledge items stored in a queryable local database.
@@ -31,12 +31,23 @@ releases:
         status: spec_complete
 
   - version: "03.0"
-    name: Generation
+    name: Claude Research Skills
     status: not_started
     focus: |
-      Draft generation from the knowledge base. A researcher provides a query
-      or outline and receives a cited draft document.
+      Claude skills for the research workflow. Claude drives search, reading,
+      knowledge queries, and paper writing through .claude/commands/ skills.
+      The Go CLI provides infrastructure; Claude provides the research
+      intelligence.
     use_cases:
-      - id: rel03.0-uc001-draft-generation
-        summary: Generate a cited draft section from knowledge base content given a query or outline
+      - id: rel03.0-uc001-search-and-acquire
+        summary: Claude searches for papers on a topic, recommends acquisitions, downloads and converts them
+        status: not_started
+      - id: rel03.0-uc002-read-and-understand
+        summary: Claude reads converted papers, discusses findings, and answers questions about content
+        status: not_started
+      - id: rel03.0-uc003-knowledge-query
+        summary: Claude queries the knowledge base, traces items to sources, and identifies themes
+        status: not_started
+      - id: rel03.0-uc004-paper-writing
+        summary: Claude creates a paper project, writes an outline, and iteratively develops sections
         status: not_started

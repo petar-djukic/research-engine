@@ -1,6 +1,6 @@
 // Package main is the entry point for the research-engine CLI.
 // Implements: prd006-search, prd001-acquisition, prd002-conversion,
-//             prd003-extraction, prd004-knowledge-base, prd005-generation (CLI surface).
+//             prd003-extraction, prd004-knowledge-base (CLI surface).
 // See docs/ARCHITECTURE § Pipeline Interface, § Project Structure.
 package main
 
@@ -19,13 +19,14 @@ var version = "dev"
 // rootCmd is the base command for the research-engine CLI.
 var rootCmd = &cobra.Command{
 	Use:   "research-engine",
-	Short: "A six-stage pipeline for academic paper research",
-	Long: `research-engine transforms academic papers into a structured knowledge base
-and uses that knowledge to generate new documents.
+	Short: "Infrastructure for Claude-driven academic research",
+	Long: `research-engine provides infrastructure for academic paper research. Claude
+drives the research workflow through skills; the CLI handles search, acquisition,
+conversion, extraction, and knowledge base operations.
 
-Each pipeline stage is a subcommand: search, acquire, convert, extract,
-store, and generate. Run any stage independently or compose multi-stage
-workflows through shell scripts or prompts.`,
+Each infrastructure stage is a subcommand: search, acquire, convert, extract,
+and knowledge. Claude composes these into research workflows through
+.claude/commands/ skills.`,
 }
 
 func init() {
