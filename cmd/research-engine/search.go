@@ -21,9 +21,14 @@ const defaultSearchTimeout = 30 * time.Second
 var searchCmd = &cobra.Command{
 	Use:   "search [query]",
 	Short: "Search academic APIs for candidate papers",
-	Long: `Search queries academic APIs (arXiv, Semantic Scholar, OpenAlex) for papers
-matching a research question or structured query parameters. Results are
-deduplicated across sources and ranked by relevance.
+	Long: `Search queries academic APIs (arXiv, Semantic Scholar, OpenAlex) and the
+PatentsView patent database for papers and patents matching a research question
+or structured query parameters. Results are deduplicated across sources and
+ranked by relevance.
+
+Use --patents to search only PatentsView (disables academic backends).
+Use --patentsview-api-key to provide a PatentsView API key, or place it in
+.secrets/patentsview-api-key.
 
 Use --query-file to save results to a YAML file for later review. When
 --query-file is provided without a query, the saved results are displayed.
@@ -43,6 +48,8 @@ func init() {
 	searchCmd.Flags().Bool("csl", false, "output results as CSL YAML for reference managers")
 	searchCmd.Flags().Bool("recency-bias", false, "boost recently published papers")
 	searchCmd.Flags().String("query-file", "", "YAML file to save/load query and results")
+	searchCmd.Flags().String("patentsview-api-key", "", "PatentsView API key")
+	searchCmd.Flags().Bool("patents", false, "search only PatentsView (disables academic backends)")
 
 	rootCmd.AddCommand(searchCmd)
 }
@@ -58,6 +65,8 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	cslOutput, _ := cmd.Flags().GetBool("csl")
 	recencyBias, _ := cmd.Flags().GetBool("recency-bias")
 	queryFile, _ := cmd.Flags().GetString("query-file")
+	patentsViewAPIKey, _ := cmd.Flags().GetString("patentsview-api-key")
+	patentsOnly, _ := cmd.Flags().GetBool("patents")
 
 	// If no --query flag, use positional args as the query.
 	if queryText == "" && len(args) > 0 {
@@ -103,12 +112,14 @@ func runSearch(cmd *cobra.Command, args []string) error {
 			Timeout:   defaultSearchTimeout,
 			UserAgent: defaultUserAgent,
 		},
-		MaxResults:            maxResults,
-		EnableArxiv:           true,
-		EnableSemanticScholar: true,
-		EnableOpenAlex:        true,
-		InterBackendDelay:     1 * time.Second,
-		RecencyBiasWindow:     2 * 365 * 24 * time.Hour,
+		MaxResults:        maxResults,
+		EnableArxiv:       !patentsOnly,
+		EnableSemanticScholar: !patentsOnly,
+		EnableOpenAlex:    !patentsOnly,
+		EnablePatentsView: patentsOnly || patentsViewAPIKey != "",
+		PatentsViewAPIKey: patentsViewAPIKey,
+		InterBackendDelay: 1 * time.Second,
+		RecencyBiasWindow: 2 * 365 * 24 * time.Hour,
 	}
 
 	client := &http.Client{Timeout: cfg.Timeout}
@@ -127,6 +138,12 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		backends = append(backends, &search.OpenAlexBackend{
 			Client: client,
 			Email:  cfg.OpenAlexEmail,
+		})
+	}
+	if cfg.EnablePatentsView {
+		backends = append(backends, &search.PatentsViewBackend{
+			Client: client,
+			APIKey: cfg.PatentsViewAPIKey,
 		})
 	}
 
