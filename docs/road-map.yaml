@@ -34,7 +34,7 @@ releases:
 
   - version: "03.0"
     name: Claude Research Skills
-    status: not_started
+    status: in_progress
     focus: |
       Claude skills for the research workflow. Claude drives search, reading,
       knowledge queries, and paper writing through .claude/commands/ skills.
@@ -52,4 +52,23 @@ releases:
         status: not_started
       - id: rel03.0-uc004-paper-writing
         summary: Claude creates a paper project, writes an outline, and iteratively develops sections
+        status: not_started
+
+  - version: "04.0"
+    name: Patent Search
+    status: not_started
+    focus: |
+      Patent search and acquisition through the USPTO PatentsView API. A
+      researcher searches US patents and published applications alongside
+      academic papers, acquires patent PDFs, and processes them through the
+      existing conversion and knowledge extraction pipeline.
+    use_cases:
+      - id: rel04.0-uc001-patent-search
+        summary: Search USPTO patents via PatentsView API
+        status: not_started
+      - id: rel04.0-uc002-patent-acquisition
+        summary: Acquire patent PDFs and create metadata
+        status: not_started
+      - id: rel04.0-uc003-patent-pipeline
+        summary: End-to-end patent search, acquire, convert, and read
         status: not_started
