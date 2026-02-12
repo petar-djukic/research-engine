@@ -1,10 +1,13 @@
 # Working directories (per-project data, not source)
-papers/
-knowledge/
-output/
-scripts/
+/papers/
+/knowledge/
+/output/
+/scripts/
 
 .DS_Store
 
 # Build output
 bin/
+
+.beads/.jsonl.lock
+.beads/daemon-error

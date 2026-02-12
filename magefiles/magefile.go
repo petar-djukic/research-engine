@@ -44,7 +44,7 @@ func Build() error {
 		return fmt.Errorf("creating %s: %w", binDir, err)
 	}
 	out := filepath.Join(binDir, binName)
-	cmd := exec.Command("go", "build", "-o", out, cmdPkg)
+	cmd := exec.Command("go", "build", "-tags", "sqlite_fts5", "-o", out, cmdPkg)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
