@@ -77,6 +77,11 @@ func AcquirePaper(client *http.Client, identifier string, cfg types.AcquisitionC
 			source = "openalex"
 		}
 	}
+	// Patent source is always "patentsview" (prd008 R4.6).
+	if idType == TypePatent {
+		source = "patentsview"
+	}
+
 	if pdfURL == "" {
 		return nil, false, fmt.Errorf("cannot resolve PDF URL for %q", identifier)
 	}
@@ -94,8 +99,18 @@ func AcquirePaper(client *http.Client, identifier string, cfg types.AcquisitionC
 	fmt.Fprintf(w, "downloading: %s (%s)\n", slug, idType)
 
 	// Download PDF to temp file, rename on success (R2.5).
+	// For patents, fall back to Google Patents HTML URL on failure (prd008 R4.4).
 	if err := downloadFile(client, pdfURL, pdfPath, cfg); err != nil {
-		return nil, false, fmt.Errorf("downloading %s: %w", slug, err)
+		if idType == TypePatent {
+			fallbackURL := googlePatentsHTMLBase + normalized + "/en"
+			fmt.Fprintf(w, "  warning: patent PDF download failed (%v), trying fallback: %s\n", err, fallbackURL)
+			if fallbackErr := downloadFile(client, fallbackURL, pdfPath, cfg); fallbackErr != nil {
+				return nil, false, fmt.Errorf("downloading %s: primary: %v, fallback: %w", slug, err, fallbackErr)
+			}
+			pdfURL = fallbackURL
+		} else {
+			return nil, false, fmt.Errorf("downloading %s: %w", slug, err)
+		}
 	}
 
 	// Build Paper record (R3.1, R3.2).
@@ -119,6 +134,10 @@ func AcquirePaper(client *http.Client, identifier string, cfg types.AcquisitionC
 	case TypeDOI:
 		if err := fetchCrossRefMetadata(client, normalized, p, cfg); err != nil {
 			fmt.Fprintf(w, "  warning: CrossRef metadata fetch failed: %v\n", err)
+		}
+	case TypePatent:
+		if err := fetchPatentMetadata(client, normalized, p, cfg); err != nil {
+			fmt.Fprintf(w, "  warning: patent metadata fetch failed: %v\n", err)
 		}
 	}
 

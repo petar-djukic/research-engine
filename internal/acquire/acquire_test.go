@@ -118,6 +118,20 @@ const sampleCrossRefJSON = `{
   }
 }`
 
+const samplePatentsViewJSON = `{
+  "patents": [{
+    "patent_title": "Method for testing patents",
+    "patent_abstract": "A method for testing patent acquisition.",
+    "patent_date": "2023-03-14",
+    "inventors": [
+      {"inventor_name_last": "Edison"},
+      {"inventor_name_last": "Tesla"}
+    ]
+  }],
+  "count": 1,
+  "total_patent_count": 1
+}`
+
 const fakePDFContent = "%PDF-1.4 fake"
 
 // newTestServer creates an httptest server that serves fake PDF downloads,
@@ -146,6 +160,12 @@ func newTestServer(t *testing.T) *httptest.Server {
 		case strings.HasPrefix(r.URL.Path, "/patent-pdf/"):
 			w.Header().Set("Content-Type", "application/pdf")
 			fmt.Fprint(w, fakePDFContent)
+		case strings.HasPrefix(r.URL.Path, "/patentsview-api/"):
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, samplePatentsViewJSON)
+		case strings.HasPrefix(r.URL.Path, "/google-patents/"):
+			w.Header().Set("Content-Type", "application/pdf")
+			fmt.Fprint(w, fakePDFContent)
 		default:
 			http.NotFound(w, r)
 		}
@@ -161,6 +181,8 @@ func overrideBaseURLs(tsURL string) func() {
 	origCR := crossrefAPIBase
 	origOA := openAlexAPIBase
 	origPatent := googlePatentsPDFBase
+	origPVAPI := patentsViewAPIBase
+	origGPatents := googlePatentsHTMLBase
 
 	arxivPDFBase = tsURL + "/pdf/"
 	arxivAPIBase = tsURL + "/api/query"
@@ -168,6 +190,8 @@ func overrideBaseURLs(tsURL string) func() {
 	crossrefAPIBase = tsURL + "/works/"
 	openAlexAPIBase = tsURL + "/openalex/"
 	googlePatentsPDFBase = tsURL + "/patent-pdf/"
+	patentsViewAPIBase = tsURL + "/patentsview-api/"
+	googlePatentsHTMLBase = tsURL + "/google-patents/"
 
 	return func() {
 		arxivPDFBase = origPDF
@@ -176,6 +200,8 @@ func overrideBaseURLs(tsURL string) func() {
 		crossrefAPIBase = origCR
 		openAlexAPIBase = origOA
 		googlePatentsPDFBase = origPatent
+		patentsViewAPIBase = origPVAPI
+		googlePatentsHTMLBase = origGPatents
 	}
 }
 
