@@ -1,7 +1,7 @@
 // Copyright Mesh Intelligence Inc., 2026. All rights reserved.
 
 // Package convert implements PDF-to-Markdown conversion with pluggable backends.
-// Implements: prd002-conversion (R4, R5, R6);
+// Implements: prd002-conversion (R1, R2, R3);
 //
 //	docs/ARCHITECTURE § Conversion.
 package convert
@@ -73,7 +73,6 @@ func ConvertPaper(c Converter, paper types.Paper, papersDir string, w io.Writer)
 	}
 
 	content := addFrontmatter(paper, raw)
-	content = postProcess(content)
 
 	if err := os.WriteFile(mdPath, []byte(content), 0o644); err != nil {
 		fmt.Fprintf(w, "failed:  %s (%v)\n", base, err)
@@ -133,31 +132,4 @@ func addFrontmatter(paper types.Paper, body string) string {
 	b.WriteString("---\n\n")
 	b.WriteString(body)
 	return b.String()
-}
-
-// postProcess normalizes section headings and inserts page markers per R5.4.
-// It operates on the raw Markdown output from the conversion backend.
-func postProcess(content string) string {
-	lines := strings.Split(content, "\n")
-	var out []string
-	for _, line := range lines {
-		normalized := normalizeHeading(line)
-		out = append(out, normalized)
-	}
-	return strings.Join(out, "\n")
-}
-
-// normalizeHeading ensures section headings use consistent Markdown levels.
-// Lines that look like numbered sections (e.g. "1. Introduction" or
-// "1 Introduction" at the start of a line with no other content) become ##.
-func normalizeHeading(line string) string {
-	trimmed := strings.TrimSpace(line)
-	if trimmed == "" {
-		return line
-	}
-	// Already a Markdown heading — leave as-is.
-	if strings.HasPrefix(trimmed, "#") {
-		return line
-	}
-	return line
 }

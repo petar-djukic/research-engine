@@ -4,101 +4,56 @@ id: prd002-conversion
 title: PDF to Markdown Conversion
 problem: |
   Academic papers are distributed as PDFs, a format optimized for visual
-  rendering rather than machine processing. PDFs encode content as positioned
-  glyphs on a page with no semantic structure: headings, paragraphs, tables,
-  and figures are indistinguishable from raw text at the file format level.
-  Downstream pipeline stages (extraction, knowledge base, generation) need
-  structured text with identified sections, paragraphs, and references.
-
-  Converting a PDF to useful structured text is difficult because papers use
-  diverse layouts: single and multi-column formats, footnotes, headers and
-  footers, inline equations, figure captions, and bibliography sections. A
-  conversion component must handle this variety and produce consistent
-  Markdown output that preserves document organization while discarding
-  layout artifacts (page numbers, column breaks, running headers).
+  rendering rather than machine processing. Downstream pipeline stages
+  (extraction, knowledge base, generation) need structured Markdown text.
+  We delegate the actual PDF parsing to external tools (GROBID, pdftotext,
+  markitdown) and focus on orchestration: invoking the backend, storing
+  output, tracking conversion status, and processing batches.
 
 goals:
-  - G1: Convert a PDF file into a structured Markdown document that preserves section hierarchy, paragraphs, and reference lists
-  - G2: Handle common academic paper layouts including single-column, two-column, and mixed formats
-  - G3: Annotate the output with page-number markers so downstream stages can link back to specific pages in the source PDF
-  - G4: Support batch conversion of multiple papers with progress reporting
+  - G1: Convert a PDF file into Markdown using an external conversion backend
+  - G2: Support batch conversion of multiple papers with progress reporting
 
 requirements:
   R1:
-    title: Structure Preservation
-    items:
-      - R1.1: Convert must identify section headings (including numbered sections like "1. Introduction" and unnumbered sections like "Abstract") and render them as Markdown headings (##, ###)
-      - R1.2: Convert must preserve paragraph boundaries as blank lines between paragraphs in the output Markdown
-      - R1.3: Convert must identify and extract the bibliography or references section and render each reference as a list item
-      - R1.4: Convert must identify the abstract and render it as a distinct section at the top of the document
-      - R1.5: Convert must preserve the order of sections as they appear in the source PDF
-
-  R2:
-    title: Content Handling
-    items:
-      - R2.1: Convert must handle multi-column layouts by merging columns into a single text flow that follows reading order
-      - R2.2: Convert must strip running headers, footers, and page numbers from the output
-      - R2.3: Convert must insert a page marker comment (e.g. "<!-- page 5 -->") at each page boundary in the output Markdown
-      - R2.4: Convert must handle inline citations (e.g. "[1]", "(Smith et al., 2020)") by preserving them as-is in the text
-      - R2.5: Convert must represent figures as a placeholder line (e.g. "[Figure N: caption text]") rather than attempting image extraction
-      - R2.6: Convert must represent tables as Markdown tables when the structure is detectable, or as placeholder text when it is not
-
-  R3:
-    title: Edge Cases
-    items:
-      - R3.1: Convert must handle scanned PDFs by falling back to OCR when text extraction yields no content
-      - R3.2: Convert must return a descriptive error when the input file is not a valid PDF
-      - R3.3: Convert must return a descriptive error when the input file is encrypted or password-protected
-      - R3.4: Convert must handle PDFs with embedded fonts that use non-standard character encodings by attempting Unicode mapping
-      - R3.5: Convert must produce output even when conversion is partial (e.g. some pages fail OCR); the output must include a warning comment listing which pages could not be converted
-
-  R4:
     title: Output Format and Storage
     items:
-      - R4.1: Convert must write the output Markdown file to papers/markdown/ with the same base filename as the source PDF (e.g. "2301.07041.md")
-      - R4.2: Convert must create the papers/markdown/ directory if it does not exist
-      - R4.3: The output Markdown must begin with a YAML frontmatter block containing the paper identifier, source PDF path, and conversion timestamp
-      - R4.4: Convert must update the Paper metadata record in papers/metadata/ to indicate conversion status (converted, partial, or failed)
+      - R1.1: Convert must write the output Markdown file to papers/markdown/ with the same base filename as the source PDF (e.g. "2301.07041.md")
+      - R1.2: Convert must create the papers/markdown/ directory if it does not exist
+      - R1.3: The output Markdown must begin with a YAML frontmatter block containing the paper identifier, source PDF path, and conversion timestamp
+      - R1.4: Convert must update the Paper metadata record in papers/metadata/ to indicate conversion status (converted, partial, or failed)
 
-  R5:
+  R2:
     title: Conversion Backend
     items:
-      - R5.1: Convert must support three conversion backends invoked as subprocesses — GROBID, pdftotext, and markitdown (container-based)
-      - R5.2: Convert must accept a configuration option to select the conversion backend
-      - R5.3: Convert must return a descriptive error when the configured backend is not installed or not found on PATH
-      - R5.4: Convert must apply post-processing to the backend output to normalize section headings, strip artifacts, and insert page markers
-      - R5.5: The markitdown backend must run inside a container using the markitdown:latest image, piping the PDF via stdin and capturing Markdown on stdout
-      - R5.6: Convert must provide a runtime auto-detection function that checks for docker first and falls back to podman if docker is unavailable
-      - R5.7: The runtime auto-detection function must verify the binary exists on PATH (e.g. "docker" or "podman") and return the name of the available runtime
-      - R5.8: Before invoking the markitdown container, Convert must verify the markitdown:latest image exists locally by running the equivalent of "docker image inspect markitdown:latest" or "podman image exists markitdown:latest" using the detected runtime
-      - R5.9: Convert must return a descriptive error when no container runtime (docker or podman) is available
-      - R5.10: Convert must return a descriptive error when the markitdown:latest image is not found locally
+      - R2.1: Convert must support three conversion backends invoked as subprocesses — GROBID, pdftotext, and markitdown (container-based)
+      - R2.2: Convert must accept a configuration option to select the conversion backend
+      - R2.3: Convert must return a descriptive error when the configured backend is not installed or not found on PATH
+      - R2.4: The markitdown backend must run inside a container using the markitdown:latest image, piping the PDF via stdin and capturing Markdown on stdout
+      - R2.5: Convert must provide a runtime auto-detection function that checks for docker first and falls back to podman if docker is unavailable
+      - R2.6: The runtime auto-detection function must verify the binary exists on PATH (e.g. "docker" or "podman") and return the name of the available runtime
+      - R2.7: Before invoking the markitdown container, Convert must verify the markitdown:latest image exists locally by running the equivalent of "docker image inspect markitdown:latest" or "podman image exists markitdown:latest" using the detected runtime
+      - R2.8: Convert must return a descriptive error when no container runtime (docker or podman) is available
+      - R2.9: Convert must return a descriptive error when the markitdown:latest image is not found locally
 
-  R6:
+  R3:
     title: Batch Processing
     items:
-      - R6.1: Convert must accept a list of Paper records or PDF paths and process each one
-      - R6.2: Convert must skip papers whose Markdown output already exists on disk (idempotent operation)
-      - R6.3: Convert must print status (converting, skipped, failed) for each paper to stdout
-      - R6.4: Convert must return a summary at the end of a batch (count of converted, skipped, and failed papers)
-      - R6.5: Convert must return a non-zero exit code if any paper in the batch failed
+      - R3.1: Convert must accept a list of Paper records or PDF paths and process each one
+      - R3.2: Convert must skip papers whose Markdown output already exists on disk (idempotent operation)
+      - R3.3: Convert must print status (converting, skipped, failed) for each paper to stdout
+      - R3.4: Convert must return a summary at the end of a batch (count of converted, skipped, and failed papers)
+      - R3.5: Convert must return a non-zero exit code if any paper in the batch failed
 
 non_goals:
-  - We do not extract images or figures from PDFs; figures are represented as placeholders
-  - We do not produce pixel-perfect Markdown that replicates the PDF layout; 80% structural fidelity is the target
-  - We do not support non-English papers in this phase; multi-language support may come later
-  - We do not build our own PDF parser; we depend on external tools (GROBID, pdftotext, markitdown container, or OCR engines)
+  - We do not build our own PDF parser; structure preservation, column merging, heading detection, OCR, and content handling are delegated to the conversion backend
+  - We do not extract images or figures from PDFs
+  - We do not support non-English papers in this phase
   - We do not handle supplementary materials or appendices differently from the main text
   - We do not require both docker and podman to be installed; one container runtime is sufficient for the markitdown backend
 
 acceptance_criteria:
-  - Convert produces a Markdown file with correct section headings for a standard single-column paper
-  - Convert produces a Markdown file with merged columns for a two-column paper
-  - Convert inserts page markers at page boundaries
-  - Convert extracts the abstract as a distinct section
-  - Convert extracts the bibliography as a list of references
-  - Convert represents figures as placeholder lines with captions
-  - Convert falls back to OCR for a scanned PDF and produces output
+  - Convert produces a Markdown file with YAML frontmatter for a given PDF
   - Convert skips a paper whose Markdown output already exists
-  - Convert returns a descriptive error for an invalid or encrypted PDF
+  - Convert returns a descriptive error when the backend is not available
   - Batch conversion continues after individual failures and reports a summary

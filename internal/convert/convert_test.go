@@ -226,17 +226,6 @@ func TestConvertPaths(t *testing.T) {
 	}
 }
 
-func TestPostProcess(t *testing.T) {
-	input := "---\npaper_id: \"test\"\n---\n\n# Title\n\nSome content.\n\n## Section\n\nMore content."
-	result := postProcess(input)
-	if !strings.Contains(result, "# Title") {
-		t.Error("postProcess should preserve headings")
-	}
-	if !strings.Contains(result, "## Section") {
-		t.Error("postProcess should preserve sub-headings")
-	}
-}
-
 // selectiveConverter returns different results per file path.
 type selectiveConverter struct {
 	outputs map[string]string
