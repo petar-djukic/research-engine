@@ -194,7 +194,7 @@ See PRD: Knowledge Base for storage schema, indexing approach, and retrieval ran
 
 ### Decision 1 File-Based Inter-Stage Communication
 
-We pass data between pipeline stages through files on disk rather than in-memory channels or a database. Each stage reads input files and writes output files in well-defined formats (PDF, Markdown, JSON/YAML). This makes intermediate results inspectable, debuggable, and version-controllable. A researcher can examine or edit any artifact between stages. Claude reads these same files through skills.
+We pass data between pipeline stages through files on disk rather than in-memory channels or a database. Each stage reads input files and writes output files in well-defined formats (PDF, Markdown, JSON/YAML). This makes intermediate results inspectable, debuggable, and version-controllable. A researcher can examine or edit any artifact between stages. Claude reads these same files directly.
 
 Benefits: transparency, reproducibility, ability to re-run individual stages, compatibility with version control. The tradeoff is that file I/O adds latency, but for a personal tool processing tens of papers, throughput is not the bottleneck.
 
@@ -212,13 +212,13 @@ Benefits: static binaries, compile-time safety, single-binary distribution. The 
 
 ### Decision 4 Local-First with Selective Internet Access
 
-We store all data locally and require network access for four activities: search (academic APIs), acquisition (paper downloads), extraction (Claude API for batch processing), and writing (Claude API through skills). Conversion and knowledge base storage run fully offline. The researcher owns their data and can inspect every file.
+We store all data locally and require network access for four activities: search (academic APIs), acquisition (paper downloads), extraction (Claude API for batch processing), and writing (Claude API). Conversion and knowledge base storage run fully offline. The researcher owns their data and can inspect every file.
 
 Benefits: data ownership, privacy, offline operation for conversion and storage, version-controllable artifacts.
 
 ### Decision 5 Generative AI for Extraction and Generation
 
-We use Generative AI (via API calls to Claude) for the extraction stage and for paper writing through skills. Research papers vary too widely in structure and language for hand-coded extraction rules to generalize. Generative AI handles the ambiguity of natural language while we enforce structure through typed output schemas.
+We use Generative AI (via API calls to Claude) for the extraction stage and for paper writing. Research papers vary too widely in structure and language for hand-coded extraction rules to generalize. Generative AI handles the ambiguity of natural language while we enforce structure through typed output schemas.
 
 Benefits: handles diverse paper formats, produces readable output. The risk of hallucination is mitigated by requiring provenance links and researcher review. See VISION.md Risks and Mitigations.
 
