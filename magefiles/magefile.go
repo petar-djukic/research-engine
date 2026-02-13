@@ -9,10 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
-	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"github.com/pdiddy/research-engine/internal/draft"
 )
 
 // projectDirs lists the working directories the pipeline expects.
@@ -190,23 +188,10 @@ func countWords(data []byte) int {
 
 const binPandoc = "pandoc"
 
-// referencesYAML mirrors the structure of a paper project's references.yaml.
-type referencesYAML struct {
-	Papers []referenceEntry `yaml:"papers"`
-}
-
-type referenceEntry struct {
-	CitationKey string   `yaml:"citation_key"`
-	PaperID     string   `yaml:"paper_id"`
-	Title       string   `yaml:"title"`
-	Authors     []string `yaml:"authors"`
-	Year        int      `yaml:"year"`
-	Venue       string   `yaml:"venue,omitempty"`
-}
-
 // Compile produces a PDF from a paper project directory using pandoc.
 // The project directory must contain numbered Markdown section files and
 // optionally a references.yaml for citation support.
+// Implements: prd007-paper-writing R6.4.
 //
 // Usage: mage compile output/papers/my-survey
 func Compile(projectDir string) error {
@@ -215,31 +200,12 @@ func Compile(projectDir string) error {
 	}
 
 	// Collect numbered section files in order.
-	entries, err := os.ReadDir(projectDir)
+	inputPaths, err := draft.SectionFiles(projectDir)
 	if err != nil {
-		return fmt.Errorf("reading project directory %s: %w", projectDir, err)
+		return err
 	}
-
-	var mdFiles []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if filepath.Ext(name) == ".md" && len(name) >= 3 && name[2] == '-' {
-			mdFiles = append(mdFiles, name)
-		}
-	}
-	sort.Strings(mdFiles)
-
-	if len(mdFiles) == 0 {
+	if len(inputPaths) == 0 {
 		return fmt.Errorf("no numbered section files (NN-*.md) found in %s", projectDir)
-	}
-
-	// Build the combined input paths.
-	var inputPaths []string
-	for _, f := range mdFiles {
-		inputPaths = append(inputPaths, filepath.Join(projectDir, f))
 	}
 
 	// Determine output PDF path.
@@ -254,11 +220,12 @@ func Compile(projectDir string) error {
 	}
 
 	// Generate BibTeX from references.yaml if it exists.
-	refsPath := filepath.Join(projectDir, "references.yaml")
 	bibPath := filepath.Join(projectDir, slug+".bib")
-	if _, err := os.Stat(refsPath); err == nil {
-		if err := generateBibTeX(refsPath, bibPath); err != nil {
-			return fmt.Errorf("generating BibTeX: %w", err)
+	refs, err := draft.LoadReferences(projectDir)
+	if err == nil && len(refs.Papers) > 0 {
+		bibContent := draft.GenerateBibTeX(refs)
+		if err := os.WriteFile(bibPath, []byte(bibContent), 0o644); err != nil {
+			return fmt.Errorf("writing BibTeX: %w", err)
 		}
 		args = append(args, "--citeproc", "--bibliography="+bibPath)
 		fmt.Printf("Generated %s from references.yaml\n", bibPath)
@@ -275,35 +242,4 @@ func Compile(projectDir string) error {
 
 	fmt.Printf("Compiled %s\n", outPDF)
 	return nil
-}
-
-// generateBibTeX reads references.yaml and writes a BibTeX file.
-func generateBibTeX(refsPath, bibPath string) error {
-	data, err := os.ReadFile(refsPath)
-	if err != nil {
-		return err
-	}
-
-	var refs referencesYAML
-	if err := yaml.Unmarshal(data, &refs); err != nil {
-		return fmt.Errorf("parsing %s: %w", refsPath, err)
-	}
-
-	var b strings.Builder
-	for _, r := range refs.Papers {
-		fmt.Fprintf(&b, "@article{%s,\n", r.CitationKey)
-		fmt.Fprintf(&b, "  title = {%s},\n", r.Title)
-		if len(r.Authors) > 0 {
-			fmt.Fprintf(&b, "  author = {%s},\n", strings.Join(r.Authors, " and "))
-		}
-		if r.Year > 0 {
-			fmt.Fprintf(&b, "  year = {%d},\n", r.Year)
-		}
-		if r.Venue != "" {
-			fmt.Fprintf(&b, "  journal = {%s},\n", r.Venue)
-		}
-		fmt.Fprintf(&b, "}\n\n")
-	}
-
-	return os.WriteFile(bibPath, []byte(b.String()), 0o644)
 }

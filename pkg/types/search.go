@@ -5,7 +5,7 @@
 //
 //	prd001-acquisition (Paper, R3.2);
 //	prd003-extraction (KnowledgeItem, R1.1-R1.4, R2.1-R2.5, R4.1-R4.4);
-//	prd005-generation (Draft, R3.2-R3.5);
+//	prd007-paper-writing (Outline, ReferencesFile, R1-R6);
 //	prd002-conversion (ConversionStatus).
 //
 // See docs/ARCHITECTURE.md § Pipeline Interface, § Data Structures.

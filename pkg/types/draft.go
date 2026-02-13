@@ -2,54 +2,99 @@
 
 package types
 
-// CitationEntry maps an inline citation in a generated draft to its source
-// KnowledgeItem and paper. Per prd005-generation R4.2.
-type CitationEntry struct {
-	// CitationKey is the inline citation label in the draft text (e.g. "[Smith2020]").
-	CitationKey string `json:"citation_key" yaml:"citation_key"`
+// Author identifies a paper author or contributor. Per prd007-paper-writing R2.1.
+type Author struct {
+	// Name is the author's display name.
+	Name string `json:"name" yaml:"name"`
 
-	// ItemID is the KnowledgeItem ID that supports this citation.
-	ItemID string `json:"item_id" yaml:"item_id"`
-
-	// PaperID is the source paper's identifier.
-	PaperID string `json:"paper_id" yaml:"paper_id"`
-
-	// Section is the section heading in the source paper.
-	Section string `json:"section" yaml:"section"`
-
-	// Page is the page number in the source paper.
-	Page int `json:"page" yaml:"page"`
+	// Affiliation is the author's institutional affiliation.
+	Affiliation string `json:"affiliation,omitempty" yaml:"affiliation,omitempty"`
 }
 
-// DraftSection represents one section in a generated draft document.
-// Per prd005-generation R2.3-R2.4.
-type DraftSection struct {
-	// Heading is the section title.
-	Heading string `json:"heading" yaml:"heading"`
-
-	// Content is the generated Markdown prose for this section.
-	Content string `json:"content" yaml:"content"`
-}
-
-// Draft represents a generated document with inline citations linking claims
-// to KnowledgeItems and their source papers.
-// Per prd005-generation R3.2-R3.5, R4.1-R4.4.
-type Draft struct {
-	// Title is the draft document title.
+// TitlePageMeta holds the YAML frontmatter from 00-title-page.md.
+// Per prd007-paper-writing R2.1-R2.3.
+type TitlePageMeta struct {
+	// Title is the paper title.
 	Title string `json:"title" yaml:"title"`
 
-	// Query is the research question or topic that prompted generation.
-	Query string `json:"query" yaml:"query"`
+	// Authors lists the paper's authors.
+	Authors []Author `json:"authors" yaml:"authors"`
 
-	// Sections contains the generated content organized by section.
-	Sections []DraftSection `json:"sections" yaml:"sections"`
+	// Date is the creation date in YYYY-MM-DD format.
+	Date string `json:"date" yaml:"date"`
 
-	// Citations maps every inline citation to its source KnowledgeItem and paper.
-	Citations []CitationEntry `json:"citations" yaml:"citations"`
+	// Type classifies the paper: survey, literature-review, original-research, position-paper.
+	Type string `json:"type" yaml:"type"`
 
-	// References lists the papers cited in this draft. Per R3.4.
-	References []Paper `json:"references" yaml:"references"`
+	// Abstract summarizes the paper. Updated as the paper develops (R2.3).
+	Abstract string `json:"abstract" yaml:"abstract"`
 
-	// OutputPath is the file path where the draft was written.
-	OutputPath string `json:"output_path" yaml:"output_path"`
+	// Keywords lists topic keywords for the paper.
+	Keywords []string `json:"keywords" yaml:"keywords"`
+}
+
+// SectionStatus tracks a section's progress through the writing workflow.
+// Per prd007-paper-writing R4.1.
+type SectionStatus string
+
+const (
+	StatusOutline SectionStatus = "outline"
+	StatusDraft   SectionStatus = "draft"
+	StatusRevised SectionStatus = "revised"
+	StatusFinal   SectionStatus = "final"
+)
+
+// OutlineSection describes one section in a paper project's outline.
+// Per prd007-paper-writing R4.1.
+type OutlineSection struct {
+	// Number is the two-digit sequence number (e.g. "01", "02").
+	Number string `json:"number" yaml:"number"`
+
+	// Title is the section heading.
+	Title string `json:"title" yaml:"title"`
+
+	// File is the section's filename (e.g. "01-introduction.md").
+	File string `json:"file" yaml:"file"`
+
+	// Description explains what the section covers.
+	Description string `json:"description" yaml:"description"`
+
+	// Status tracks writing progress: outline, draft, revised, final.
+	Status SectionStatus `json:"status" yaml:"status"`
+}
+
+// Outline holds the paper structure from outline.yaml.
+// Per prd007-paper-writing R4.1-R4.3.
+type Outline struct {
+	// Sections lists the paper's sections in order.
+	Sections []OutlineSection `json:"sections" yaml:"sections"`
+}
+
+// ReferenceEntry records a cited paper in references.yaml.
+// Per prd007-paper-writing R5.1.
+type ReferenceEntry struct {
+	// CitationKey is the inline citation label (e.g. "Vaswani2017").
+	CitationKey string `json:"citation_key" yaml:"citation_key"`
+
+	// PaperID is the acquisition slug linking to papers/.
+	PaperID string `json:"paper_id" yaml:"paper_id"`
+
+	// Title is the cited paper's title.
+	Title string `json:"title" yaml:"title"`
+
+	// Authors lists author surnames.
+	Authors []string `json:"authors" yaml:"authors"`
+
+	// Year is the publication year.
+	Year int `json:"year" yaml:"year"`
+
+	// Venue is the journal or conference (optional).
+	Venue string `json:"venue,omitempty" yaml:"venue,omitempty"`
+}
+
+// ReferencesFile holds all cited papers from references.yaml.
+// Per prd007-paper-writing R5.1-R5.4.
+type ReferencesFile struct {
+	// Papers lists every cited paper.
+	Papers []ReferenceEntry `json:"papers" yaml:"papers"`
 }

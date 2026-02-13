@@ -118,36 +118,11 @@ type KnowledgeBaseConfig struct {
 	MaxResults int `json:"max_results" yaml:"max_results"`
 }
 
-// OutputFormat selects the generation output format.
-// Per prd005-generation R6.1-R6.3.
-type OutputFormat string
-
-const (
-	OutputMarkdown OutputFormat = "markdown"
-	OutputLaTeX    OutputFormat = "latex"
-)
-
-// GenerationConfig holds settings for the generation stage.
-// Per prd005-generation R3.1, R6.1-R6.3.
-type GenerationConfig struct {
-	AIConfig `yaml:",inline"`
-
-	// OutputDir is the directory for generated drafts (e.g. "output/drafts/").
-	OutputDir string `json:"output_dir" yaml:"output_dir"`
-
-	// NotesDir is the directory for brainstorming notes (e.g. "output/notes/").
-	NotesDir string `json:"notes_dir" yaml:"notes_dir"`
-
-	// Format selects the output format: markdown or latex.
-	Format OutputFormat `json:"format" yaml:"format"`
-}
-
 // PipelineConfig groups all stage configurations for the pipeline.
 type PipelineConfig struct {
-	Search       SearchConfig        `json:"search" yaml:"search"`
-	Acquisition  AcquisitionConfig   `json:"acquisition" yaml:"acquisition"`
-	Conversion   ConversionConfig    `json:"conversion" yaml:"conversion"`
-	Extraction   ExtractionConfig    `json:"extraction" yaml:"extraction"`
+	Search        SearchConfig        `json:"search" yaml:"search"`
+	Acquisition   AcquisitionConfig   `json:"acquisition" yaml:"acquisition"`
+	Conversion    ConversionConfig    `json:"conversion" yaml:"conversion"`
+	Extraction    ExtractionConfig    `json:"extraction" yaml:"extraction"`
 	KnowledgeBase KnowledgeBaseConfig `json:"knowledge_base" yaml:"knowledge_base"`
-	Generation   GenerationConfig    `json:"generation" yaml:"generation"`
 }
