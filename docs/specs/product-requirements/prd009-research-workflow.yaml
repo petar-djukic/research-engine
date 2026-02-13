@@ -1,0 +1,90 @@
+# Copyright Mesh Intelligence Inc., 2026. All rights reserved.
+
+id: prd009-research-workflow
+title: Claude Research Workflow
+problem: |
+  The research engine provides a Go CLI with five infrastructure commands
+  (search, acquire, convert, extract, knowledge) and a filesystem-based data
+  layout. Claude operates as the researcher's partner, choosing which commands
+  to run and which files to read based on what the researcher asks for. For
+  Claude to do this well, it needs a single reference describing every command,
+  every flag, every file path convention, and every data format. The current
+  approach distributes this information across five prescriptive skill scripts,
+  each telling Claude step-by-step what to do. Claude does not need scripts; it
+  needs a capability map. We consolidate that map into one PRD and one rule file.
+
+goals:
+  - G1: Document every CLI command with its flags, inputs, and outputs so Claude can invoke the right command for any research request
+  - G2: Document the filesystem layout so Claude knows where artifacts live and what state they represent
+  - G3: Document the paper project conventions so Claude can create and maintain structured paper projects
+  - G4: Document the secrets and configuration conventions so Claude can diagnose missing credentials
+
+requirements:
+  R1:
+    title: CLI Commands
+    items:
+      - R1.1: The rule must document the search command with all flags (query, author, keywords, from, to, max-results, json, csl, recency-bias, query-file, patentsview-api-key, patents) and their types, defaults, and behavior
+      - R1.2: The rule must document the acquire command with all flags (timeout, delay, papers-dir) and supported identifier types (arXiv ID, DOI, US patent number, direct URL)
+      - R1.3: The rule must document the convert command with all flags (backend, papers-dir, batch) and its container runtime dependency
+      - R1.4: The rule must document the extract command with all flags (model, api-key, papers-dir, knowledge-dir, batch) and the configuration priority order (flags, config file, secrets, environment)
+      - R1.5: The rule must document the knowledge command and its three subcommands (store, retrieve, export) with all flags
+      - R1.6: The rule must document the retrieve subcommand's query modes (full-text, type filter, tag filter, paper filter, trace, combined) with examples
+      - R1.7: The rule must document exit codes so Claude can detect and report failures
+
+  R2:
+    title: Filesystem Layout
+    items:
+      - R2.1: The rule must document the papers directory structure (papers/raw/ for PDFs, papers/markdown/ for converted Markdown, papers/metadata/ for YAML metadata)
+      - R2.2: The rule must document the knowledge directory structure (knowledge/extracted/ for YAML extraction output, knowledge/index/ for the SQLite database)
+      - R2.3: The rule must document the output directory structure (output/papers/ for paper projects created by write-paper)
+      - R2.4: The rule must document the pipeline state model where a paper's state is determined by which files exist (PDF in raw/ means acquired, .md in markdown/ means converted, -items.yaml in extracted/ means extracted)
+
+  R3:
+    title: Paper Project Conventions
+    items:
+      - R3.1: The rule must document the paper project directory layout under output/papers/[slug]/ including 00-title-page.md, numbered section files, outline.yaml, and references.yaml
+      - R3.2: The rule must document the title page frontmatter fields (title, authors, date, type, abstract, keywords) per prd007-paper-writing R2.1
+      - R3.3: The rule must document the outline.yaml structure (sections list with number, title, file, description, status) per prd007-paper-writing R4.1
+      - R3.4: The rule must document the references.yaml structure (papers list with citation_key, paper_id, title, authors, year, venue) per prd007-paper-writing R5.1
+      - R3.5: The rule must document the citation format (square brackets, AuthorYear keys, semicolons for multiple citations) per prd007-paper-writing R6.1-R6.3
+      - R3.6: The rule must document section file naming conventions (NN-slug.md, two-digit prefix, 00 reserved for title page) per prd007-paper-writing R3.4-R3.5
+
+  R4:
+    title: Capability Descriptions
+    items:
+      - R4.1: The rule must describe capabilities declaratively (what tools exist and what they produce) not imperatively (step-by-step scripts)
+      - R4.2: The rule must describe the search-then-acquire pattern as a capability, not a workflow
+      - R4.3: The rule must describe the read-and-discuss pattern as a capability (Claude reads Markdown files directly, no CLI needed)
+      - R4.4: The rule must describe the query-then-write pattern as a capability (knowledge retrieval feeds paper writing)
+      - R4.5: The rule must not prescribe the order in which Claude uses capabilities; Claude infers order from user intent
+
+  R5:
+    title: Secrets and Configuration
+    items:
+      - R5.1: The rule must document the .secrets/ directory convention (one file per key, filename is key name, contents are the value)
+      - R5.2: The rule must list all supported secret keys (anthropic-api-key, semantic-scholar-api-key, openalex-email, patentsview-api-key) with which commands use them
+      - R5.3: The rule must document the configuration priority order (CLI flags, config file, environment variables with RESEARCH_ENGINE_ prefix, secrets directory)
+      - R5.4: The rule must document that missing secrets are not errors; commands that need them fail with descriptive messages
+
+non_goals:
+  - We do not script step-by-step workflows; Claude infers the right sequence from user intent
+  - We do not define new CLI commands; this PRD documents existing commands
+  - We do not define Claude's reasoning or decision-making; we describe the tools and conventions Claude has access to
+  - We do not replace prd007-paper-writing; we reference it for paper project conventions
+
+acceptance_criteria:
+  - A single rule file documents all CLI commands with their flags, types, defaults, and behavior
+  - The rule documents the filesystem layout and pipeline state model
+  - The rule documents paper project conventions consolidated from prd007
+  - The rule documents secrets and configuration conventions
+  - The rule uses declarative capability descriptions, not imperative scripts
+  - Claude can invoke the correct command with correct flags for any research request by reading the rule alone
+
+references:
+  - prd006-search
+  - prd001-acquisition
+  - prd002-conversion
+  - prd003-extraction
+  - prd004-knowledge-base
+  - prd007-paper-writing
+  - prd008-patent-search
