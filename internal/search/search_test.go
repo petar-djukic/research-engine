@@ -121,6 +121,125 @@ func TestDeduplicateNoDuplicates(t *testing.T) {
 	}
 }
 
+// --- Patent deduplication ---
+
+func TestDeduplicatePatentByKindCode(t *testing.T) {
+	// Same patent from two queries with different kind codes should be deduped.
+	results := []types.SearchResult{
+		{Identifier: "US7654321B2", Title: "Patent A", Source: "patentsview", RelevanceScore: 0.9},
+		{Identifier: "US7654321", Title: "Patent A", Source: "patentsview", RelevanceScore: 0.8},
+	}
+
+	deduped, removed := deduplicate(results)
+	if removed != 1 {
+		t.Errorf("removed = %d, want 1", removed)
+	}
+	if len(deduped) != 1 {
+		t.Fatalf("len(deduped) = %d, want 1", len(deduped))
+	}
+	// Merged result should keep higher score.
+	if deduped[0].RelevanceScore != 0.9 {
+		t.Errorf("merged score = %f, want 0.9", deduped[0].RelevanceScore)
+	}
+}
+
+func TestDeduplicatePatentSameID(t *testing.T) {
+	// Exact same patent ID from two backends should be deduped.
+	results := []types.SearchResult{
+		{Identifier: "US7654321B2", Title: "Patent A", Source: "backend1", RelevanceScore: 0.9},
+		{Identifier: "US7654321B2", Title: "Patent A", Source: "backend2", RelevanceScore: 0.7},
+	}
+
+	deduped, removed := deduplicate(results)
+	if removed != 1 {
+		t.Errorf("removed = %d, want 1", removed)
+	}
+	if len(deduped) != 1 {
+		t.Fatalf("len(deduped) = %d, want 1", len(deduped))
+	}
+	if !strings.Contains(deduped[0].Source, "backend2") {
+		t.Errorf("merged source should contain both backends, got %q", deduped[0].Source)
+	}
+}
+
+func TestDeduplicateNoCrossTypeMerge(t *testing.T) {
+	// A paper and a patent with the same title should NOT be deduped.
+	results := []types.SearchResult{
+		{Identifier: "2301.07041", Title: "Attention Is All You Need", Source: "arxiv", RelevanceScore: 0.9},
+		{Identifier: "US7654321B2", Title: "Attention Is All You Need", Source: "patentsview", RelevanceScore: 0.8},
+	}
+
+	deduped, removed := deduplicate(results)
+	if removed != 0 {
+		t.Errorf("removed = %d, want 0 (paper and patent should not be cross-deduped)", removed)
+	}
+	if len(deduped) != 2 {
+		t.Errorf("len(deduped) = %d, want 2", len(deduped))
+	}
+}
+
+func TestDeduplicateMixedResults(t *testing.T) {
+	// Mix of papers and patents with some duplicates within each type.
+	results := []types.SearchResult{
+		{Identifier: "2301.07041", Title: "Paper A", Source: "arxiv", RelevanceScore: 0.9},
+		{Identifier: "2301.07041", Title: "Paper A", Source: "semantic_scholar", RelevanceScore: 0.8},
+		{Identifier: "US7654321B2", Title: "Patent X", Source: "patentsview", RelevanceScore: 0.7},
+		{Identifier: "US7654321", Title: "Patent X", Source: "patentsview", RelevanceScore: 0.6},
+		{Identifier: "2302.00001", Title: "Paper B", Source: "arxiv", RelevanceScore: 0.5},
+	}
+
+	deduped, removed := deduplicate(results)
+	if removed != 2 {
+		t.Errorf("removed = %d, want 2 (one paper dup, one patent dup)", removed)
+	}
+	if len(deduped) != 3 {
+		t.Errorf("len(deduped) = %d, want 3", len(deduped))
+	}
+}
+
+func TestStripKindCodeSearch(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"US7654321B2", "US7654321"},
+		{"US7654321B1", "US7654321"},
+		{"US20230012345A1", "US20230012345"},
+		{"US7654321", "US7654321"},
+		{"2301.07041", "2301.07041"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := stripKindCode(tt.input)
+			if got != tt.want {
+				t.Errorf("stripKindCode(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDedupKey(t *testing.T) {
+	tests := []struct {
+		name   string
+		result types.SearchResult
+		want   string
+	}{
+		{"arxiv paper", types.SearchResult{Identifier: "2301.07041", Source: "arxiv"}, "id:2301.07041"},
+		{"doi paper", types.SearchResult{Identifier: "10.1234/test", Source: "semantic_scholar"}, "id:10.1234/test"},
+		{"patent with kind code", types.SearchResult{Identifier: "US7654321B2", Source: "patentsview"}, "patent:US7654321"},
+		{"patent without kind code", types.SearchResult{Identifier: "US7654321", Source: "patentsview"}, "patent:US7654321"},
+		{"empty identifier", types.SearchResult{}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dedupKey(tt.result)
+			if got != tt.want {
+				t.Errorf("dedupKey() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // --- Ranking ---
 
 func TestApplyRecencyBias(t *testing.T) {
