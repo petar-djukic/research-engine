@@ -224,3 +224,18 @@ We resolve configuration values in this order (first match wins):
 4. Secrets directory (`.secrets/`)
 
 Missing secrets are not errors. Commands that need them fail with descriptive messages explaining which secret is missing and how to provide it.
+
+## Build System
+
+We use Mage for build automation. All targets require the `sqlite_fts5` build tag.
+
+Table 12 Mage Targets
+
+| Target | Description |
+|--------|-------------|
+| `mage build` | Compile the CLI binary into `bin/research-engine` |
+| `mage test` | Run all Go tests with the `sqlite_fts5` build tag |
+| `mage clean` | Remove build artifacts (`bin/` directory) |
+| `mage init` | Create the project directory structure (`papers/`, `knowledge/`, `output/`) |
+| `mage stats` | Print project metrics (Go production/test LOC, documentation word count) |
+| `mage compile output/papers/[slug]` | Compile a paper project to PDF using Pandoc |

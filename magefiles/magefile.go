@@ -57,6 +57,26 @@ func Build() error {
 	return nil
 }
 
+// Test runs all Go tests with the sqlite_fts5 build tag.
+func Test() error {
+	cmd := exec.Command("go", "test", "-tags", "sqlite_fts5", "./...")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("go test: %w", err)
+	}
+	return nil
+}
+
+// Clean removes build artifacts (bin/ directory).
+func Clean() error {
+	if err := os.RemoveAll(binDir); err != nil {
+		return fmt.Errorf("removing %s: %w", binDir, err)
+	}
+	fmt.Println("Cleaned build artifacts.")
+	return nil
+}
+
 // Stats prints project metrics: Go production/test LOC and documentation word count.
 func Stats() error {
 	prodLines, err := countGoLines(".", false)
