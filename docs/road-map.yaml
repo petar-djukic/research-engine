@@ -33,13 +33,13 @@ releases:
         status: spec_complete
 
   - version: "03.0"
-    name: Claude Research Skills
+    name: Claude Research Workflow
     status: in_progress
     focus: |
-      Claude skills for the research workflow. Claude drives search, reading,
-      knowledge queries, and paper writing through .claude/commands/ skills.
-      The Go CLI provides infrastructure; Claude provides the research
-      intelligence.
+      Rules-based research workflow. A single rule file describes all CLI
+      commands, file conventions, and configuration. Claude infers the right
+      actions from the researcher's natural-language requests. The Go CLI
+      provides infrastructure; Claude provides the research intelligence.
     use_cases:
       - id: rel03.0-uc001-search-and-acquire
         summary: Claude searches for papers on a topic, recommends acquisitions, downloads and converts them

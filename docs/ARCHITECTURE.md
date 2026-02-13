@@ -4,7 +4,7 @@
 
 ## System Overview
 
-We build a two-layer system for academic research. The bottom layer is a Go CLI that provides infrastructure: searching academic APIs, downloading PDFs, converting them to structured Markdown, extracting typed knowledge items, and indexing them in a local database. The top layer is Claude, operating through skills that drive the research workflow. Claude searches for papers, reads them, queries the knowledge base, and writes new work grounded in what it has read.
+We build a two-layer system for academic research. The bottom layer is a Go CLI that provides infrastructure: searching academic APIs, downloading PDFs, converting them to structured Markdown, extracting typed knowledge items, and indexing them in a local database. The top layer is Claude, operating as the researcher's partner. Claude searches for papers, reads them, queries the knowledge base, and writes new work grounded in what it has read. A single rule file (`.claude/rules/research-workflow.md`) describes all available CLI commands, file conventions, and configuration so Claude can act on any research request.
 
 The core insight is that Claude can read, understand, and write, but it needs papers in a format it can process and a knowledge base to retrieve specific items across many papers. We convert PDFs to Markdown so Claude can read them. We extract knowledge items with provenance so Claude can find and cite specific claims without re-reading entire papers. The Go infrastructure handles the mechanical work; Claude handles the judgment.
 
@@ -23,12 +23,8 @@ package "Researcher" {
   [Researcher] as user
 }
 
-package "Claude (Skills Layer)" {
-  [search-papers] as sp
-  [acquire-papers] as ap
-  [read-papers] as rp
-  [query-knowledge] as qk
-  [write-paper] as wp
+package "Claude (Rules Layer)" {
+  [research-workflow\nrule] as rw
 }
 
 package "Go CLI (Infrastructure Layer)" {
@@ -45,21 +41,15 @@ package "Filesystem (Data Layer)" {
   [output/papers/] as out
 }
 
-user --> sp
-user --> ap
-user --> rp
-user --> qk
-user --> wp
+user --> rw
 
-sp --> srch
-ap --> acq
-ap --> conv
-ap --> ext
-qk --> kb
-wp --> kb
+rw --> srch
+rw --> acq
+rw --> conv
+rw --> ext
+rw --> kb
 
-rp ..> papers : reads directly
-wp ..> papers : reads directly
+rw ..> papers : reads directly
 
 srch --> papers
 acq --> papers
@@ -67,12 +57,12 @@ conv --> papers
 ext --> know
 kb --> know
 
-wp --> out
+rw --> out
 
 @enduml
 ```
 
-|Figure 1 Two-layer architecture showing Claude skills, Go CLI infrastructure, and filesystem |
+|Figure 1 Two-layer architecture showing Claude with research-workflow rule, Go CLI infrastructure, and filesystem |
 
 ### Pipeline Lifecycle
 
@@ -84,13 +74,13 @@ A paper moves through five infrastructure states, one per pipeline stage:
 4. Extracted: knowledge items have been pulled from the structured text and linked to their source sections.
 5. Stored: knowledge items reside in the knowledge base, indexed for retrieval.
 
-Paper writing is handled by Claude through the write-paper skill, not by a Go pipeline stage. Claude reads papers directly (via converted Markdown), queries the knowledge base, and writes sections with inline citations.
+Paper writing is handled by Claude, not by a Go pipeline stage. Claude reads papers directly (via converted Markdown), queries the knowledge base, and writes sections with inline citations.
 
-Each state is visible as files on disk. A paper's progress through the pipeline is determined by which artifacts exist in the project directory. PRDs define the detailed state transitions and error conditions for each stage.
+Each state is visible as files on disk. A paper's progress through the pipeline is determined by which artifacts exist in the project directory. The research-workflow rule documents this state model so Claude can determine what actions are available for each paper. PRDs define the detailed state transitions and error conditions for each stage.
 
 ### Data Flow
 
-Data flows forward through the infrastructure pipeline. Each stage consumes the output of the previous stage and produces input for the next. The stages share no in-memory state; all communication happens through files on disk. Claude reads these files directly through skills.
+Data flows forward through the infrastructure pipeline. Each stage consumes the output of the previous stage and produces input for the next. The stages share no in-memory state; all communication happens through files on disk. Claude reads these files directly.
 
 |  |
 |:--:|
@@ -135,7 +125,7 @@ Table 1 Pipeline Data Structures
 |-----------|------|-------------|-------------|
 | SearchResult | A candidate paper from an academic API query (identifier, title, authors, abstract, source, relevance score) | Search | Acquisition (as input identifiers) |
 | Paper | Metadata and file paths for an acquired paper (URL, DOI, title, authors, PDF path) | Acquisition | Conversion, Extraction |
-| KnowledgeItem | A typed extraction from a paper (claim, method, definition) with provenance (paper ID, section, page) | Extraction | Knowledge Base, Claude (via skills) |
+| KnowledgeItem | A typed extraction from a paper (claim, method, definition) with provenance (paper ID, section, page) | Extraction | Knowledge Base, Claude |
 
 ### Operations per Stage
 
@@ -152,46 +142,21 @@ Table 2 Pipeline Operations
 
 Each operation is a Cobra subcommand under `research-engine`. PRDs define the full signatures, preconditions, postconditions, and error handling for each operation.
 
-## Claude Skills
+## Claude Research Workflow
 
-Claude drives the research workflow through five skills defined in `.claude/commands/`. Each skill combines Claude's ability to reason, read, and write with the Go CLI infrastructure. The researcher invokes skills through slash commands in Claude Code.
+Claude drives the research workflow through a single rule file at `.claude/rules/research-workflow.md`. The rule describes what CLI commands exist, what flags they accept, where files live, and what conventions to follow. Claude reads this rule automatically and infers the right actions from the researcher's natural-language requests. The researcher talks to Claude; Claude decides which commands to run and which files to read.
 
-Table 3 Claude Skills
+Table 3 Research Capabilities
 
-| Skill | Purpose | Infrastructure Used |
-|-------|---------|-------------------|
-| search-papers | Search for papers on a topic, recommend acquisitions | research-engine search |
-| acquire-papers | Download papers, convert to Markdown, optionally extract | research-engine acquire, convert, extract |
-| read-papers | Browse and read converted Markdown papers | Reads files directly (no CLI) |
-| query-knowledge | Search the knowledge base, trace items to sources | research-engine knowledge retrieve |
-| write-paper | Create paper projects, write sections with citations | research-engine knowledge retrieve, reads papers directly |
+| Capability | What Claude Does | Infrastructure Used |
+|------------|------------------|---------------------|
+| Search | Formulates queries, invokes the search CLI, interprets and ranks results | `research-engine search` |
+| Acquire | Downloads papers, converts to Markdown, optionally extracts knowledge | `research-engine acquire`, `convert`, `extract` |
+| Read | Reads converted Markdown papers directly, summarizes, discusses | Reads files directly (no CLI) |
+| Query | Searches the knowledge base, traces items to sources, identifies themes | `research-engine knowledge retrieve` |
+| Write | Creates paper projects, writes sections with inline citations | `research-engine knowledge retrieve`, reads papers directly |
 
-### search-papers
-
-Claude accepts a research topic or question, formulates one or more queries, and invokes the search CLI. It interprets results, recommends which papers to acquire, and can proceed directly to acquisition. Claude adds value by reasoning about query formulation and result relevance.
-
-### acquire-papers
-
-Claude downloads papers and converts them to readable Markdown in a single action. It invokes the acquire and convert CLI commands, reports successes and failures, and optionally triggers extraction to populate the knowledge base. This combines three infrastructure stages into one researcher-facing action.
-
-### read-papers
-
-Claude reads converted Markdown papers directly using the Read tool. It can list available papers, present summaries, read specific sections, discuss findings, and compare across papers. This is the skill that makes the "Claude reads papers" vision concrete. No CLI command is needed; Claude reads the files on disk.
-
-### query-knowledge
-
-Claude queries the knowledge base to find extracted items across all papers. It invokes the retrieve CLI with queries and filters, presents results grouped by paper and type, and can trace items back to their source passages. Claude helps identify connections, gaps, and themes.
-
-### write-paper
-
-Claude creates structured paper projects and writes content iteratively. The workflow has four phases:
-
-1. Initialize: create a project directory with a title page containing YAML frontmatter.
-2. Outline: propose numbered section files with descriptions, based on available knowledge.
-3. Write: compose section content with inline citations, maintaining a references file.
-4. Refine: revise sections based on researcher feedback.
-
-See PRD: Paper Writing for the project structure, file naming, and citation conventions.
+The rule replaces five prescriptive skill scripts with a declarative capability map. Instead of step-by-step scripts that tell Claude what to do, the rule describes what tools exist and what conventions to maintain. Claude decides the workflow based on user intent. See prd009-research-workflow for the requirements that govern this rule.
 
 ## System Components
 
@@ -221,7 +186,7 @@ See PRD: Knowledge Extraction for item types, provenance requirements, and extra
 
 ### Knowledge Base
 
-We store extracted knowledge items and make them retrievable by topic. The knowledge base component persists KnowledgeItems to SQLite with FTS5 full-text indexing and supports structured queries by type, tag, and paper. A researcher (or Claude through the query-knowledge skill) queries the knowledge base and receives ranked items with their provenance. The storage format supports human-readable YAML/JSON export for version control.
+We store extracted knowledge items and make them retrievable by topic. The knowledge base component persists KnowledgeItems to SQLite with FTS5 full-text indexing and supports structured queries by type, tag, and paper. A researcher (or Claude through the retrieve CLI) queries the knowledge base and receives ranked items with their provenance. The storage format supports human-readable YAML/JSON export for version control.
 
 See PRD: Knowledge Base for storage schema, indexing approach, and retrieval ranking.
 
@@ -233,11 +198,11 @@ We pass data between pipeline stages through files on disk rather than in-memory
 
 Benefits: transparency, reproducibility, ability to re-run individual stages, compatibility with version control. The tradeoff is that file I/O adds latency, but for a personal tool processing tens of papers, throughput is not the bottleneck.
 
-### Decision 2 Cobra CLI with Skill-Based Composition
+### Decision 2 Cobra CLI with Rules-Based Composition
 
-We expose each infrastructure stage as a Cobra subcommand (`research-engine search`, `research-engine acquire`, `research-engine convert`, etc.). Claude skills compose multi-stage workflows by invoking CLI commands and reading files directly. The researcher interacts primarily through Claude skills rather than invoking CLI commands directly.
+We expose each infrastructure stage as a Cobra subcommand (`research-engine search`, `research-engine acquire`, `research-engine convert`, etc.). A single rule file describes all available commands and conventions. Claude composes multi-stage workflows by invoking CLI commands and reading files directly, choosing the right actions based on the researcher's intent. The researcher interacts through natural language; Claude consults the rule to determine which commands to run.
 
-Benefits: the CLI provides a stable, testable interface that Claude can invoke; skills add reasoning and judgment on top of mechanical operations; the researcher gets a conversational interface rather than a command-line one.
+Benefits: the CLI provides a stable, testable interface that Claude can invoke; the rule gives Claude a complete capability map without prescribing workflows; the researcher gets a conversational interface rather than a command-line one.
 
 ### Decision 3 Go Over Python
 
@@ -259,7 +224,7 @@ Benefits: handles diverse paper formats, produces readable output. The risk of h
 
 ### Decision 6 Claude as Researcher
 
-We position Claude as the researcher's partner rather than as a backend API. Claude drives the research workflow through skills: it searches for papers, reads their content, queries the knowledge base, and writes new work. The Go CLI provides infrastructure that Claude invokes. This separates concerns: Go handles deterministic, repeatable operations (search, download, convert, index); Claude handles work that requires judgment (reading comprehension, finding connections, writing prose).
+We position Claude as the researcher's partner rather than as a backend API. Claude drives the research workflow by consulting a rule that describes available tools and conventions, then choosing which commands to run based on what the researcher asks for. The Go CLI provides infrastructure that Claude invokes. This separates concerns: Go handles deterministic, repeatable operations (search, download, convert, index); Claude handles work that requires judgment (reading comprehension, finding connections, writing prose).
 
 Benefits: leverages Claude's full capabilities (reasoning, reading, writing) rather than reducing it to API calls for classification. The researcher gets a conversational research partner rather than a command-line tool. The tradeoff is dependence on Claude's context window for long papers, which we mitigate by supporting section-by-section reading and the knowledge base for cross-paper retrieval.
 
@@ -277,8 +242,8 @@ Table 4 Technology Choices
 | PDF conversion | MarkItDown (container-based) | Transform PDF to structured Markdown |
 | Knowledge storage | SQLite with FTS5 | Full-text indexed knowledge base with structured queries |
 | Knowledge export | YAML/JSON files | Human-readable, version-controllable item export |
-| Generative AI | Claude API (Anthropic) | Extraction classification, paper writing through skills |
-| Research interface | Claude Code skills | Five skills that drive the research workflow |
+| Generative AI | Claude API (Anthropic) | Extraction classification, paper writing |
+| Research interface | Claude Code rule | Research-workflow rule describes capabilities; Claude infers actions |
 | CLI framework | Cobra | Infrastructure command-line interface |
 | Configuration | Viper | CLI configuration and project settings |
 | Testing | Go testing + testify | Unit and integration tests |
@@ -291,13 +256,9 @@ PRDs for each stage specify the exact tool versions and configuration.
 ```
 research-engine/
   .claude/
-    commands/                # Claude research skills
-      search-papers.md       # Search for academic papers
-      acquire-papers.md      # Download and convert papers
-      read-papers.md         # Browse and read converted papers
-      query-knowledge.md     # Search the knowledge base
-      write-paper.md         # Create and refine papers
-    rules/                   # Project conventions and format rules
+    commands/                # Issue-tracking and development workflows
+    rules/                   # Project conventions, format rules, and research-workflow rule
+      research-workflow.md   # CLI commands, file layout, paper conventions, secrets
   cmd/
     research-engine/         # CLI entry point and subcommands
       main.go
@@ -338,7 +299,8 @@ Table 5 Package Roles
 | Directory | Role |
 |-----------|------|
 | .secrets/ | API keys loaded at runtime. Not committed to git. |
-| .claude/commands/ | Claude research skills. The researcher's primary interface to the tool. |
+| .claude/commands/ | Issue-tracking and development workflows (do-work, make-work, bootstrap). |
+| .claude/rules/research-workflow.md | Research capability map. Describes CLI commands, file layout, paper conventions, and secrets. |
 | cmd/research-engine/ | CLI entry point and Cobra subcommands. Infrastructure interface. |
 | internal/search/ | Queries academic and patent APIs, deduplicates and ranks candidate papers and patents. |
 | internal/acquire/ | Downloads papers and patents, resolves identifiers, creates metadata records. |
@@ -352,7 +314,7 @@ Table 5 Package Roles
 
 ## Implementation Status
 
-We have completed the Foundation, Core Pipeline, and Knowledge phases. The Skills phase is in progress.
+We have completed the Foundation, Core Pipeline, and Knowledge phases. The Research Workflow phase is in progress.
 
 Implemented packages:
 
@@ -370,7 +332,7 @@ Table 6 Implementation Phases
 | Foundation | Done | VISION, ARCHITECTURE, PRDs for all stages, Cobra CLI scaffolding |
 | Core Pipeline | Done | Search, Acquisition, and Conversion stages implemented |
 | Knowledge | Done | Extraction and Knowledge Base stages implemented |
-| Skills | In progress | Claude research skills, paper writing workflow, Mage compile target |
+| Research Workflow | In progress | Research-workflow rule, paper writing conventions, Mage compile target |
 
 ## Related Documents
 
@@ -385,7 +347,8 @@ Table 7 Related Documents
 | PRD: Knowledge Extraction | Requirements for identifying typed knowledge items |
 | PRD: Knowledge Base | Requirements for storage, indexing, and retrieval |
 | PRD: Patent Search | Requirements for PatentsView backend, patent identifier resolution, and patent PDF acquisition |
-| PRD: Paper Writing | Requirements for Claude-driven paper writing workflow (supersedes PRD: Paper Generation) |
+| PRD: Paper Writing | Requirements for paper writing workflow (supersedes PRD: Paper Generation) |
+| PRD: Research Workflow | Requirements for the research-workflow rule (CLI commands, file layout, conventions) |
 
 ## References
 
