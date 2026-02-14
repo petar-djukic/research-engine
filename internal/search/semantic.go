@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pdiddy/research-engine/internal/httputil"
 	"github.com/pdiddy/research-engine/pkg/types"
 )
 
@@ -66,7 +67,7 @@ func (b *SemanticScholarBackend) Search(ctx context.Context, query Query, cfg ty
 		req.Header.Set("x-api-key", b.APIKey)
 	}
 
-	resp, err := b.Client.Do(req)
+	resp, err := httputil.DoWithRetry(ctx, b.Client, req, 0)
 	if err != nil {
 		return nil, fmt.Errorf("Semantic Scholar API request: %w", err)
 	}

@@ -337,30 +337,8 @@ func TestPatentsViewBackendMaxResultsCapping(t *testing.T) {
 // --- Error cases ---
 
 func TestPatentsViewBackendRateLimit(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Retry-After", "60")
-		w.WriteHeader(http.StatusTooManyRequests)
-	}))
-	defer ts.Close()
-
-	old := patentsViewSearchBase
-	patentsViewSearchBase = ts.URL + "/"
-	defer func() { patentsViewSearchBase = old }()
-
-	b := &PatentsViewBackend{Client: ts.Client()}
-	_, err := b.Search(context.Background(), Query{FreeText: "test"}, testCfg())
-	if err == nil {
-		t.Fatal("expected rate limit error")
-	}
-	if !strings.Contains(err.Error(), "rate limit") {
-		t.Errorf("error = %q, should mention rate limit", err.Error())
-	}
-	if !strings.Contains(err.Error(), "60") {
-		t.Errorf("error = %q, should mention retry-after value", err.Error())
-	}
-}
-
-func TestPatentsViewBackendRateLimitNoRetryAfter(t *testing.T) {
+	// DoWithRetry handles 429 retries. After exhausting retries the backend
+	// sees a 429 status and returns "HTTP 429" in the error.
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))

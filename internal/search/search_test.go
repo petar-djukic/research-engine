@@ -14,8 +14,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pdiddy/research-engine/internal/httputil"
 	"github.com/pdiddy/research-engine/pkg/types"
 )
+
+func init() {
+	// Use a tiny retry delay so 429 tests finish quickly.
+	httputil.RetryBaseDelay = 1 * time.Millisecond
+}
 
 // --- mock backend ---
 

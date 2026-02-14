@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pdiddy/research-engine/internal/httputil"
 	"github.com/pdiddy/research-engine/pkg/types"
 )
 
@@ -47,7 +48,7 @@ func (b *ArxivBackend) Search(ctx context.Context, query Query, cfg types.Search
 	}
 	req.Header.Set("User-Agent", cfg.UserAgent)
 
-	resp, err := b.Client.Do(req)
+	resp, err := httputil.DoWithRetry(ctx, b.Client, req, 0)
 	if err != nil {
 		return nil, fmt.Errorf("arXiv API request: %w", err)
 	}

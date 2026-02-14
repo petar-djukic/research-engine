@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pdiddy/research-engine/internal/httputil"
 	"github.com/pdiddy/research-engine/pkg/types"
 )
 
@@ -65,19 +66,11 @@ func (b *PatentsViewBackend) Search(ctx context.Context, query Query, cfg types.
 		req.Header.Set("X-Api-Key", b.APIKey)
 	}
 
-	resp, err := b.Client.Do(req)
+	resp, err := httputil.DoWithRetry(ctx, b.Client, req, 0)
 	if err != nil {
 		return nil, fmt.Errorf("PatentsView API request: %w", err)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusTooManyRequests {
-		retryAfter := resp.Header.Get("Retry-After")
-		if retryAfter != "" {
-			return nil, fmt.Errorf("PatentsView rate limit exceeded, retry after %s seconds", retryAfter)
-		}
-		return nil, fmt.Errorf("PatentsView rate limit exceeded (HTTP 429)")
-	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("PatentsView API returned HTTP %d", resp.StatusCode)
